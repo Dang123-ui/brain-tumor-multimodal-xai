@@ -1,14 +1,12 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Lottie from "lottie-react";
 import {
-  ChevronDown,
   FileImage,
   Loader2,
   Maximize2,
-  MessageSquareText,
   Minimize2,
   Paperclip,
   Search,
@@ -43,6 +41,19 @@ function patientCode(patient: AgentPatient) {
   return patient.patient_external_id || String(patient.id);
 }
 
+function getRoutePatientId(pathname: string, searchParams: URLSearchParams) {
+  const queryPatientId = searchParams.get("patientId");
+  if (queryPatientId) return queryPatientId;
+
+  const parts = pathname.split("/").filter(Boolean);
+  const contextualRoutes = new Set(["patients", "results", "history"]);
+  if (parts.length >= 2 && contextualRoutes.has(parts[0])) {
+    return decodeURIComponent(parts[1]);
+  }
+
+  return undefined;
+}
+
 function getErrorDetail(error: unknown) {
   if (typeof error === "object" && error !== null) {
     const maybeAxios = error as {
@@ -60,6 +71,8 @@ function getErrorDetail(error: unknown) {
 
 export function AgentFloatingWidget() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const {
     mode,
     setMode,
@@ -86,6 +99,16 @@ export function AgentFloatingWidget() {
 
   const panelOpen = mode === "panel" || mode === "expanded";
   const isExpanded = mode === "expanded";
+  const routePatientId = useMemo(
+    () => getRoutePatientId(pathname, searchParams),
+    [pathname, searchParams],
+  );
+  const activePatientId = routePatientId || selectedPatientId;
+  const patientContextLabel = routePatientId
+    ? `Context từ trang: ${routePatientId}`
+    : selectedPatientId
+      ? `Đang chọn ${selectedPatientId}`
+      : "Chưa có context bệnh nhân";
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
@@ -119,7 +142,7 @@ export function AgentFloatingWidget() {
       append(
         newMessage(
           "assistant",
-          "Cần chọn mã bệnh nhân trước khi lưu ảnh MRI và chạy pipeline. Hãy nhập tên hoặc mã bệnh nhân ở ô bên dưới.",
+          "Cần chọn bệnh nhân để lưu ảnh MRI và chạy pipeline. Hãy nhập tên hoặc mã bệnh nhân ở form bên dưới để tôi tiếp tục.",
         ),
       );
       return;
@@ -198,7 +221,7 @@ export function AgentFloatingWidget() {
     );
 
     if (file) {
-      await runQuickMri(file, selectedPatientId || patientQuery);
+      await runQuickMri(file, activePatientId || patientQuery);
       return;
     }
 
@@ -207,7 +230,7 @@ export function AgentFloatingWidget() {
       const response = await agentApi.chat({
         message: content,
         thread_id: activeThreadId,
-        patient_id: selectedPatientId,
+        patient_id: activePatientId,
       });
       setActiveThreadId(response.data.thread_id);
       append(newMessage("assistant", response.data.message));
@@ -264,7 +287,7 @@ export function AgentFloatingWidget() {
                 NeuroDiagnosis Agent
               </h2>
               <p className="truncate text-xs text-slate-500">
-                {selectedPatientId ? `Context: ${selectedPatientId}` : "Chưa chọn bệnh nhân"}
+                {patientContextLabel}
               </p>
             </div>
           </div>
@@ -321,7 +344,7 @@ export function AgentFloatingWidget() {
         {showPatientSearch && (
           <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
             <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Chọn bệnh nhân
+              Interrupt: Chọn bệnh nhân để tiếp tục
             </label>
             <div className="relative">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
@@ -403,15 +426,6 @@ export function AgentFloatingWidget() {
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowPatientSearch((value) => !value)}
-            className="mt-2 flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-teal-600"
-          >
-            <MessageSquareText className="h-3.5 w-3.5" />
-            {selectedPatientId ? `Đang chọn ${selectedPatientId}` : "Chọn bệnh nhân"}
-            <ChevronDown className="h-3.5 w-3.5" />
-          </button>
         </form>
       </div>
     </section>
