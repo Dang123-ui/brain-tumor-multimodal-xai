@@ -104,11 +104,6 @@ export function AgentFloatingWidget() {
     [pathname, searchParams],
   );
   const activePatientId = routePatientId || selectedPatientId;
-  const patientContextLabel = routePatientId
-    ? `Context từ trang: ${routePatientId}`
-    : selectedPatientId
-      ? `Đang chọn ${selectedPatientId}`
-      : "Chưa có context bệnh nhân";
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
@@ -287,7 +282,7 @@ export function AgentFloatingWidget() {
                 NeuroDiagnosis Agent
               </h2>
               <p className="truncate text-xs text-slate-500">
-                {patientContextLabel}
+                Trợ lý AI lâm sàng
               </p>
             </div>
           </div>
