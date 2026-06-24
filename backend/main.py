@@ -10,6 +10,7 @@ import models
 from database import engine, SessionLocal
 from utils import hash_password
 from routers import upload, records, multimodal, inference, analysis, auth, admin
+from agent.router import router as agent_router
 
 # Tự động tạo tất cả bảng trong PostgreSQL khi khởi động
 models.Base.metadata.create_all(bind=engine)
@@ -76,6 +77,9 @@ app.include_router(auth.router)
 
 # --- Nhóm Quản trị (Access Log) ---
 app.include_router(admin.router)
+
+# --- Agent Chatbox ---
+app.include_router(agent_router)
 
 
 # ============================================================

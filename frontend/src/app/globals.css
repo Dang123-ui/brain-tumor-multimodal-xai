@@ -65,3 +65,103 @@ body {
 .animate-progress-indefinite {
   animation: progress-indefinite 2s infinite linear;
 }
+
+.agent-shell {
+  width: 640px;
+  height: min(760px, calc(100vh - 48px));
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 24px;
+  background: #ffffff;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28);
+}
+
+.agent-shell-expanded {
+  width: min(960px, calc(100vw - 360px));
+  height: calc(100vh - 48px);
+}
+
+.agent-shell::before {
+  content: "";
+  position: absolute;
+  display: block;
+  width: 180px;
+  height: 1200px;
+  background: linear-gradient(#ff2288, #387ef0);
+  opacity: 0;
+  transition: opacity 300ms;
+  animation: agent-border-rotation 8000ms infinite linear;
+  animation-play-state: paused;
+}
+
+.agent-shell:hover::before,
+.agent-shell:focus-within::before {
+  opacity: 1;
+  animation-play-state: running;
+}
+
+.agent-shell::after {
+  content: "";
+  position: absolute;
+  display: block;
+  inset: 1px;
+  border-radius: 23px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(24px);
+}
+
+.agent-content {
+  position: relative;
+  z-index: 1;
+  width: calc(100% - 4px);
+  height: calc(100% - 4px);
+  border-radius: 22px;
+  background: #ffffff;
+  color: #0f172a;
+  overflow: hidden;
+}
+
+.agent-content::before {
+  opacity: 0;
+  transition: opacity 300ms;
+  content: "";
+  display: block;
+  background: white;
+  width: 8px;
+  height: 90px;
+  position: absolute;
+  filter: blur(50px);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.agent-shell:hover .agent-content::before,
+.agent-shell:focus-within .agent-content::before {
+  opacity: 1;
+}
+
+@keyframes agent-border-rotation {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 900px) {
+  .agent-shell,
+  .agent-shell-expanded {
+    width: calc(100vw - 24px);
+    height: calc(100vh - 32px);
+    right: 12px;
+    bottom: 12px;
+  }
+}

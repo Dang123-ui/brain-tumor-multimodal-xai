@@ -3,6 +3,8 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { AgentWidgetProvider } from "@/contexts/AgentWidgetContext";
+import { AgentFloatingWidget } from "@/components/agent/AgentFloatingWidget";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 
@@ -35,13 +37,16 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-teal-500/30">
-      <Sidebar />
-      <div className="ml-64 flex flex-col min-h-screen">
-        <Header />
-        <main className="flex-1 p-6 relative">
-          {children}
-        </main>
-      </div>
+      <AgentWidgetProvider>
+        <Sidebar />
+        <div className="ml-64 flex flex-col min-h-screen">
+          <Header />
+          <main className="flex-1 p-6 relative">
+            {children}
+          </main>
+        </div>
+        <AgentFloatingWidget />
+      </AgentWidgetProvider>
     </div>
   );
 }
