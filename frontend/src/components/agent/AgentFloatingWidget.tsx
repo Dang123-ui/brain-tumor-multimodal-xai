@@ -73,7 +73,7 @@ export function AgentFloatingWidget() {
   const [messages, setMessages] = useState<ChatMessage[]>([
     newMessage(
       "assistant",
-      "Xin chao. Toi co the ho tro hoi dap ho so, giai thich XAI, chay MRI pipeline nhanh qua chatbox va mo form xac nhan/chinh nhan.",
+      "Xin chào. Tôi có thể hỗ trợ hỏi đáp hồ sơ, giải thích XAI, chạy MRI pipeline nhanh qua chatbox và mở form xác nhận/chỉnh nhãn.",
     ),
   ]);
   const [busy, setBusy] = useState(false);
@@ -119,7 +119,7 @@ export function AgentFloatingWidget() {
       append(
         newMessage(
           "assistant",
-          "Can chon ma benh nhan truoc khi luu anh MRI va chay pipeline. Hay nhap ten hoac ma benh nhan trong o ben duoi.",
+          "Cần chọn mã bệnh nhân trước khi lưu ảnh MRI và chạy pipeline. Hãy nhập tên hoặc mã bệnh nhân ở ô bên dưới.",
         ),
       );
       return;
@@ -127,7 +127,7 @@ export function AgentFloatingWidget() {
 
     setBusy(true);
     try {
-      append(newMessage("tool", "Dang upload MRI qua chatbox va tao task MRI pipeline..."));
+      append(newMessage("tool", "Đang upload MRI qua chatbox và tạo task MRI pipeline..."));
       const quick = await agentApi.quickMri({ patientId, file });
       const { task_id, image_id, patient } = quick.data;
       const routePatientId = patient.patient_external_id || String(patient.id);
@@ -155,7 +155,7 @@ export function AgentFloatingWidget() {
 
       const summary = await agentApi.quickMriSummary(image_id);
       append(newMessage("assistant", summary.data.summary));
-      append(newMessage("tool", "Dang mo trang ket qua chi tiet..."));
+      append(newMessage("tool", "Đang mở trang kết quả chi tiết..."));
       router.push(`/results/${encodeURIComponent(routePatientId)}?imageId=${image_id}`);
     } catch (error: unknown) {
       const { status, detail, message } = getErrorDetail(error);
@@ -165,14 +165,14 @@ export function AgentFloatingWidget() {
           : undefined;
       if (status === 409 && interruptDetail?.type === "select_patient") {
         setShowPatientSearch(true);
-        append(newMessage("assistant", interruptDetail.reason || "Can chon benh nhan truoc khi chay MRI pipeline."));
+        append(newMessage("assistant", interruptDetail.reason || "Cần chọn bệnh nhân trước khi chạy MRI pipeline."));
       } else {
         append(
           newMessage(
             "error",
             (typeof detail === "string" ? detail : undefined) ||
               message ||
-              "Khong the chay MRI pipeline qua chatbox.",
+              "Không thể chạy MRI pipeline qua chatbox.",
           ),
         );
       }
@@ -218,7 +218,7 @@ export function AgentFloatingWidget() {
           "error",
           (typeof detail === "string" ? detail : undefined) ||
             message ||
-            "Agent khong phan hoi duoc.",
+            "Agent không phản hồi được.",
         ),
       );
     } finally {
@@ -231,7 +231,7 @@ export function AgentFloatingWidget() {
     setSelectedPatientId(code);
     setPatientQuery(code);
     setShowPatientSearch(false);
-    append(newMessage("tool", `Da chon benh nhan ${patient.name || "khong ten"} (${code}).`));
+    append(newMessage("tool", `Đã chọn bệnh nhân ${patient.name || "không tên"} (${code}).`));
   };
 
   if (!panelOpen) {
@@ -240,7 +240,7 @@ export function AgentFloatingWidget() {
         type="button"
         onClick={() => setMode("panel")}
         className="fixed bottom-6 right-6 z-[70] flex h-20 w-20 items-center justify-center rounded-full border border-teal-300/70 bg-white shadow-2xl shadow-teal-900/30 transition hover:scale-105"
-        aria-label="Mo NeuroDiagnosis Agent"
+        aria-label="Mở NeuroDiagnosis Agent"
       >
         <span className="absolute inset-0 rounded-full bg-teal-400/20 blur-xl" />
         <Lottie animationData={robotAnimation} loop className="relative h-16 w-16" />
@@ -264,7 +264,7 @@ export function AgentFloatingWidget() {
                 NeuroDiagnosis Agent
               </h2>
               <p className="truncate text-xs text-slate-500">
-                {selectedPatientId ? `Context: ${selectedPatientId}` : "Chua chon benh nhan"}
+                {selectedPatientId ? `Context: ${selectedPatientId}` : "Chưa chọn bệnh nhân"}
               </p>
             </div>
           </div>
@@ -273,7 +273,7 @@ export function AgentFloatingWidget() {
               type="button"
               onClick={() => setMode(isExpanded ? "panel" : "expanded")}
               className="rounded-lg p-2 text-slate-500 hover:bg-slate-200 hover:text-slate-950"
-              title={isExpanded ? "Thu gon" : "Mo rong"}
+              title={isExpanded ? "Thu gọn" : "Mở rộng"}
             >
               {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             </button>
@@ -321,14 +321,14 @@ export function AgentFloatingWidget() {
         {showPatientSearch && (
           <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
             <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Chon benh nhan
+              Chọn bệnh nhân
             </label>
             <div className="relative">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
               <input
                 value={patientQuery}
                 onChange={(event) => setPatientQuery(event.target.value)}
-                placeholder="Nhap ten hoac ma benh nhan..."
+                placeholder="Nhập tên hoặc mã bệnh nhân..."
                 className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 outline-none focus:border-teal-400"
               />
             </div>
@@ -341,13 +341,13 @@ export function AgentFloatingWidget() {
                   className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-teal-50"
                 >
                   <span className="font-medium text-slate-800">
-                    {patient.name || "Benh nhan khong ten"}
+                    {patient.name || "Bệnh nhân không tên"}
                   </span>
                   <span className="text-xs text-slate-500">{patientCode(patient)}</span>
                 </button>
               ))}
               {!patientResults.length && (
-                <div className="px-3 py-3 text-sm text-slate-500">Khong co ket qua.</div>
+                <div className="px-3 py-3 text-sm text-slate-500">Không có kết quả.</div>
               )}
             </div>
           </div>
@@ -384,7 +384,7 @@ export function AgentFloatingWidget() {
             <textarea
               value={draftMessage}
               onChange={(event) => setDraftMessage(event.target.value)}
-              placeholder="Hoi Agent hoac attach MRI de chay chan doan nhanh..."
+              placeholder="Hỏi Agent hoặc attach MRI để chạy chẩn đoán nhanh..."
               rows={2}
               className="max-h-28 min-h-11 flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-400"
               onKeyDown={(event) => {
@@ -398,7 +398,7 @@ export function AgentFloatingWidget() {
               type="submit"
               disabled={!canSend}
               className="rounded-xl bg-teal-600 p-3 text-white shadow-lg shadow-teal-600/20 transition hover:bg-teal-500 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
-              title="Gui"
+              title="Gửi"
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </button>
@@ -409,7 +409,7 @@ export function AgentFloatingWidget() {
             className="mt-2 flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-teal-600"
           >
             <MessageSquareText className="h-3.5 w-3.5" />
-            {selectedPatientId ? `Dang chon ${selectedPatientId}` : "Chon benh nhan"}
+            {selectedPatientId ? `Đang chọn ${selectedPatientId}` : "Chọn bệnh nhân"}
             <ChevronDown className="h-3.5 w-3.5" />
           </button>
         </form>

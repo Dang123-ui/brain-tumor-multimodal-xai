@@ -43,24 +43,24 @@ class AgentChatResponse(BaseModel):
 
 def _patient_display(patient: models.Patient) -> str:
     code = patient.patient_external_id or str(patient.id)
-    name = patient.name or "Benh nhan"
+    name = patient.name or "Bệnh nhân"
     return f"{name} ({code})"
 
 
 def _summarize_image_result(result: dict[str, Any] | None, patient: models.Patient | None = None) -> str:
     patient_text = f" cho {_patient_display(patient)}" if patient else ""
     if not result:
-        return f"Da tao task phan tich MRI{patient_text}. Toi se tiep tuc theo doi tien trinh va tom tat khi co ket qua."
+        return f"Đã tạo task phân tích MRI{patient_text}. Tôi sẽ tiếp tục theo dõi tiến trình và tóm tắt khi có kết quả."
 
     if result.get("no_tumor_detected"):
         return (
-            f"Da chay xong MRI pipeline{patient_text}. Ket qua: khong phat hien khoi u tren anh MRI nay. "
-            "Khong chay tien luong/risk score vi khong co khoi u de danh gia."
+            f"Đã chạy xong MRI pipeline{patient_text}. Kết quả: không phát hiện khối u trên ảnh MRI này. "
+            "Không chạy tiên lượng/risk score vì không có khối u để đánh giá."
         )
 
-    label = result.get("tumor_label") or "chua co nhan"
+    label = result.get("tumor_label") or "chưa có nhãn"
     confidence = result.get("classification_confidence")
-    confidence_text = f" voi confidence {confidence * 100:.2f}%" if isinstance(confidence, (int, float)) else ""
+    confidence_text = f" với confidence {confidence * 100:.2f}%" if isinstance(confidence, (int, float)) else ""
     xai_parts = []
     if result.get("detection_xai_data_url"):
         xai_parts.append("ODAM")
@@ -68,10 +68,10 @@ def _summarize_image_result(result: dict[str, Any] | None, patient: models.Patie
         xai_parts.append("Seg-Eigen-CAM")
     if result.get("classification_xai_data_url"):
         xai_parts.append("Finer-CAM")
-    xai_text = f" Da sinh XAI: {', '.join(xai_parts)}." if xai_parts else ""
+    xai_text = f" Đã sinh XAI: {', '.join(xai_parts)}." if xai_parts else ""
     return (
-        f"Da chay xong MRI pipeline{patient_text}. Ket qua: phan loai {label}{confidence_text}."
-        f"{xai_text} Toi se mo trang ket qua chi tiet de bac si xem anh, mask, heatmap va xac nhan lai nhan neu can."
+        f"Đã chạy xong MRI pipeline{patient_text}. Kết quả: phân loại {label}{confidence_text}."
+        f"{xai_text} Tôi sẽ mở trang kết quả chi tiết để bác sĩ xem ảnh, mask, heatmap và xác nhận lại nhãn nếu cần."
     )
 
 
@@ -80,10 +80,10 @@ def _basic_agent_reply(request: AgentChatRequest) -> tuple[str, str, list[dict[s
     actions: list[dict[str, Any]] = []
 
     if any(keyword in message for keyword in ["chuan doan", "chẩn đoán", "mri", "pipeline"]):
-        actions.append({"type": "quick_mri_hint", "label": "Attach MRI va chon/nhap ma benh nhan"})
+        actions.append({"type": "quick_mri_hint", "label": "Attach MRI và chọn/nhập mã bệnh nhân"})
         return (
             "quick_mri",
-            "Bac si co the attach anh MRI truc tiep trong chatbox. Neu chua co ma benh nhan, toi se yeu cau chon benh nhan truoc khi chay pipeline.",
+            "Bác sĩ có thể attach ảnh MRI trực tiếp trong chatbox. Nếu chưa có mã bệnh nhân, tôi sẽ yêu cầu chọn bệnh nhân trước khi chạy pipeline.",
             actions,
         )
 
@@ -91,20 +91,20 @@ def _basic_agent_reply(request: AgentChatRequest) -> tuple[str, str, list[dict[s
         actions.append({"type": "classification_review_hint", "image_id": request.image_id})
         return (
             "classification_review",
-            "Toi co the mo form xac nhan hoac chinh nhan phan loai cho anh dang xem. Ket qua chi duoc ghi vao classification_reviews sau khi bac si bam xac nhan.",
+            "Tôi có thể mở form xác nhận hoặc chỉnh nhãn phân loại cho ảnh đang xem. Kết quả chỉ được ghi vào classification_reviews sau khi bác sĩ bấm xác nhận.",
             actions,
         )
 
     if any(keyword in message for keyword in ["lich su", "lịch sử", "timeline", "dien tien", "diễn tiến"]):
         return (
             "timeline_reasoning",
-            "Toi se doc lich su chan doan cua benh nhan tu database va tom tat dien tien theo tung lan chan doan.",
+            "Tôi sẽ đọc lịch sử chẩn đoán của bệnh nhân từ database và tóm tắt diễn tiến theo từng lần chẩn đoán.",
             actions,
         )
 
     return (
         "general",
-        "Toi la NeuroDiagnosis Agent. Bac si co the hoi ve ho so benh nhan, giai thich XAI, chay chan doan nhanh MRI qua chatbox, hoac mo form xac nhan/chinh nhan.",
+        "Tôi là NeuroDiagnosis Agent. Bác sĩ có thể hỏi về hồ sơ bệnh nhân, giải thích XAI, chạy chẩn đoán nhanh MRI qua chatbox, hoặc mở form xác nhận/chỉnh nhãn.",
         actions,
     )
 
@@ -184,13 +184,13 @@ async def quick_mri_diagnosis(
             status_code=409,
             detail={
                 "type": "select_patient",
-                "reason": "Can chon benh nhan de luu anh MRI va ket qua chan doan.",
+                "reason": "Cần chọn bệnh nhân để lưu ảnh MRI và kết quả chẩn đoán.",
             },
         )
 
     patient = crud.get_patient_by_id_or_external(db, patient_id)
     if not patient:
-        raise HTTPException(status_code=404, detail=f"Khong tim thay benh nhan '{patient_id}'")
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy bệnh nhân '{patient_id}'")
 
     ensure_bucket_exists(BUCKET_NAME)
 
@@ -224,7 +224,7 @@ async def quick_mri_diagnosis(
         )
 
         return {
-            "message": "Da upload MRI qua chatbox va tao task MRI pipeline.",
+            "message": "Đã upload MRI qua chatbox và tạo task MRI pipeline.",
             "patient": {
                 "id": patient.id,
                 "patient_external_id": patient.patient_external_id,
@@ -238,7 +238,7 @@ async def quick_mri_diagnosis(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Loi quick MRI diagnosis: {exc}") from exc
+        raise HTTPException(status_code=500, detail=f"Lỗi quick MRI diagnosis: {exc}") from exc
 
 
 @router.get("/quick-mri/{image_id}/summary")
@@ -249,7 +249,7 @@ def quick_mri_summary(
 ):
     image = db.query(models.Image).filter(models.Image.id == image_id).first()
     if not image:
-        raise HTTPException(status_code=404, detail="Khong tim thay anh MRI")
+        raise HTTPException(status_code=404, detail="Không tìm thấy ảnh MRI")
 
     patient = db.query(models.Patient).filter(models.Patient.id == image.patient_id).first()
     task = (
@@ -304,7 +304,7 @@ def notifications(
     )
     items = []
     if low_confidence:
-        items.append({"type": "review_required", "message": f"Co {low_confidence} ca confidence thap can review."})
+        items.append({"type": "review_required", "message": f"Có {low_confidence} ca confidence thấp cần review."})
     if stale_risk:
-        items.append({"type": "stale_risk", "message": f"Co {stale_risk} ca khong phat hien u nhung van co risk score."})
+        items.append({"type": "stale_risk", "message": f"Có {stale_risk} ca không phát hiện u nhưng vẫn có risk score."})
     return {"items": items}
