@@ -1,16 +1,17 @@
-import json
+﻿import json
 import os
 import uuid
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 import crud
 import models
+from agent.graph import run_agent
+from agent.schemas import AgentChatRequest, AgentChatResponse
 from database import get_db
 from routers.inference import _create_inference_task
 from utils import (
@@ -26,41 +27,26 @@ router = APIRouter(prefix="/agent", tags=["Agent"])
 BUCKET_NAME = os.getenv("MINIO_BUCKET") or os.getenv("R2_BUCKET") or "medical-data"
 
 
-class AgentChatRequest(BaseModel):
-    message: str
-    thread_id: Optional[str] = None
-    patient_id: Optional[str] = None
-    image_id: Optional[int] = None
-    selected_region: Optional[dict[str, Any]] = None
-
-
-class AgentChatResponse(BaseModel):
-    thread_id: str
-    message: str
-    intent: str
-    actions: list[dict[str, Any]] = Field(default_factory=list)
-
-
 def _patient_display(patient: models.Patient) -> str:
     code = patient.patient_external_id or str(patient.id)
-    name = patient.name or "Bệnh nhân"
+    name = patient.name or "Bá»‡nh nhÃ¢n"
     return f"{name} ({code})"
 
 
 def _summarize_image_result(result: dict[str, Any] | None, patient: models.Patient | None = None) -> str:
     patient_text = f" cho {_patient_display(patient)}" if patient else ""
     if not result:
-        return f"Đã tạo task phân tích MRI{patient_text}. Tôi sẽ tiếp tục theo dõi tiến trình và tóm tắt khi có kết quả."
+        return f"ÄÃ£ táº¡o task phÃ¢n tÃ­ch MRI{patient_text}. TÃ´i sáº½ tiáº¿p tá»¥c theo dÃµi tiáº¿n trÃ¬nh vÃ  tÃ³m táº¯t khi cÃ³ káº¿t quáº£."
 
     if result.get("no_tumor_detected"):
         return (
-            f"Đã chạy xong MRI pipeline{patient_text}. Kết quả: không phát hiện khối u trên ảnh MRI này. "
-            "Không chạy tiên lượng/risk score vì không có khối u để đánh giá."
+            f"ÄÃ£ cháº¡y xong MRI pipeline{patient_text}. Káº¿t quáº£: khÃ´ng phÃ¡t hiá»‡n khá»‘i u trÃªn áº£nh MRI nÃ y. "
+            "KhÃ´ng cháº¡y tiÃªn lÆ°á»£ng/risk score vÃ¬ khÃ´ng cÃ³ khá»‘i u Ä‘á»ƒ Ä‘Ã¡nh giÃ¡."
         )
 
-    label = result.get("tumor_label") or "chưa có nhãn"
+    label = result.get("tumor_label") or "chÆ°a cÃ³ nhÃ£n"
     confidence = result.get("classification_confidence")
-    confidence_text = f" với confidence {confidence * 100:.2f}%" if isinstance(confidence, (int, float)) else ""
+    confidence_text = f" vá»›i confidence {confidence * 100:.2f}%" if isinstance(confidence, (int, float)) else ""
     xai_parts = []
     if result.get("detection_xai_data_url"):
         xai_parts.append("ODAM")
@@ -68,75 +54,63 @@ def _summarize_image_result(result: dict[str, Any] | None, patient: models.Patie
         xai_parts.append("Seg-Eigen-CAM")
     if result.get("classification_xai_data_url"):
         xai_parts.append("Finer-CAM")
-    xai_text = f" Đã sinh XAI: {', '.join(xai_parts)}." if xai_parts else ""
+    xai_text = f" ÄÃ£ sinh XAI: {', '.join(xai_parts)}." if xai_parts else ""
     return (
-        f"Đã chạy xong MRI pipeline{patient_text}. Kết quả: phân loại {label}{confidence_text}."
-        f"{xai_text} Tôi sẽ mở trang kết quả chi tiết để bác sĩ xem ảnh, mask, heatmap và xác nhận lại nhãn nếu cần."
-    )
-
-
-def _basic_agent_reply(request: AgentChatRequest) -> tuple[str, str, list[dict[str, Any]]]:
-    message = request.message.lower().strip()
-    actions: list[dict[str, Any]] = []
-
-    if any(keyword in message for keyword in ["chuan doan", "chẩn đoán", "mri", "pipeline"]):
-        actions.append({"type": "quick_mri_hint", "label": "Attach MRI và chọn/nhập mã bệnh nhân"})
-        return (
-            "quick_mri",
-            "Bác sĩ có thể attach ảnh MRI trực tiếp trong chatbox. Nếu chưa có mã bệnh nhân, tôi sẽ yêu cầu chọn bệnh nhân trước khi chạy pipeline.",
-            actions,
-        )
-
-    if any(keyword in message for keyword in ["review", "xac nhan", "xác nhận", "chinh nhan", "chỉnh nhãn"]):
-        actions.append({"type": "classification_review_hint", "image_id": request.image_id})
-        return (
-            "classification_review",
-            "Tôi có thể mở form xác nhận hoặc chỉnh nhãn phân loại cho ảnh đang xem. Kết quả chỉ được ghi vào classification_reviews sau khi bác sĩ bấm xác nhận.",
-            actions,
-        )
-
-    if any(keyword in message for keyword in ["lich su", "lịch sử", "timeline", "dien tien", "diễn tiến"]):
-        return (
-            "timeline_reasoning",
-            "Tôi sẽ đọc lịch sử chẩn đoán của bệnh nhân từ database và tóm tắt diễn tiến theo từng lần chẩn đoán.",
-            actions,
-        )
-
-    return (
-        "general",
-        "Tôi là NeuroDiagnosis Agent. Bác sĩ có thể hỏi về hồ sơ bệnh nhân, giải thích XAI, chạy chẩn đoán nhanh MRI qua chatbox, hoặc mở form xác nhận/chỉnh nhãn.",
-        actions,
+        f"ÄÃ£ cháº¡y xong MRI pipeline{patient_text}. Káº¿t quáº£: phÃ¢n loáº¡i {label}{confidence_text}."
+        f"{xai_text} TÃ´i sáº½ má»Ÿ trang káº¿t quáº£ chi tiáº¿t Ä‘á»ƒ bÃ¡c sÄ© xem áº£nh, mask, heatmap vÃ  xÃ¡c nháº­n láº¡i nhÃ£n náº¿u cáº§n."
     )
 
 
 @router.post("/chat", response_model=AgentChatResponse)
 def chat(
     request: AgentChatRequest,
+    db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    intent, reply, actions = _basic_agent_reply(request)
+    result = run_agent(
+        db=db,
+        current_user=current_user,
+        message=request.message,
+        thread_id=request.thread_id,
+        patient_id=request.patient_id,
+        image_id=request.image_id,
+        selected_region=request.selected_region,
+    )
     return AgentChatResponse(
-        thread_id=request.thread_id or str(uuid.uuid4()),
-        message=reply,
-        intent=intent,
-        actions=actions,
+        thread_id=result["thread_id"],
+        message=result.get("final_response") or "",
+        intent=result.get("intent") or "general",
+        actions=result.get("actions") or [],
+        tool_results=result.get("tool_results") or {},
     )
 
 
 @router.post("/chat/stream")
 async def chat_stream(
     request: AgentChatRequest,
+    db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    intent, reply, actions = _basic_agent_reply(request)
-    thread_id = request.thread_id or str(uuid.uuid4())
+    result = run_agent(
+        db=db,
+        current_user=current_user,
+        message=request.message,
+        thread_id=request.thread_id,
+        patient_id=request.patient_id,
+        image_id=request.image_id,
+        selected_region=request.selected_region,
+    )
+    intent = result.get("intent") or "general"
+    reply = result.get("final_response") or ""
+    actions = result.get("actions") or []
+    thread_id = result["thread_id"]
 
     async def event_generator():
         yield f"event: tool_start\ndata: {json.dumps({'tool': 'route_intent', 'thread_id': thread_id})}\n\n"
-        yield f"event: tool_result\ndata: {json.dumps({'intent': intent, 'actions': actions})}\n\n"
+        yield f"event: tool_result\ndata: {json.dumps({'intent': intent, 'actions': actions, 'tool_results': result.get('tool_results')}, ensure_ascii=False)}\n\n"
         for token in reply.split(" "):
-            yield f"event: token\ndata: {json.dumps(token + ' ')}\n\n"
-        yield f"event: final\ndata: {json.dumps({'thread_id': thread_id, 'intent': intent, 'message': reply, 'actions': actions})}\n\n"
+            yield f"event: token\ndata: {json.dumps(token + ' ', ensure_ascii=False)}\n\n"
+        yield f"event: final\ndata: {json.dumps({'thread_id': thread_id, 'intent': intent, 'message': reply, 'actions': actions}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -184,13 +158,13 @@ async def quick_mri_diagnosis(
             status_code=409,
             detail={
                 "type": "select_patient",
-                "reason": "Cần chọn bệnh nhân để lưu ảnh MRI và kết quả chẩn đoán.",
+                "reason": "Cáº§n chá»n bá»‡nh nhÃ¢n Ä‘á»ƒ lÆ°u áº£nh MRI vÃ  káº¿t quáº£ cháº©n Ä‘oÃ¡n.",
             },
         )
 
     patient = crud.get_patient_by_id_or_external(db, patient_id)
     if not patient:
-        raise HTTPException(status_code=404, detail=f"Không tìm thấy bệnh nhân '{patient_id}'")
+        raise HTTPException(status_code=404, detail=f"KhÃ´ng tÃ¬m tháº¥y bá»‡nh nhÃ¢n '{patient_id}'")
 
     ensure_bucket_exists(BUCKET_NAME)
 
@@ -224,7 +198,7 @@ async def quick_mri_diagnosis(
         )
 
         return {
-            "message": "Đã upload MRI qua chatbox và tạo task MRI pipeline.",
+            "message": "ÄÃ£ upload MRI qua chatbox vÃ  táº¡o task MRI pipeline.",
             "patient": {
                 "id": patient.id,
                 "patient_external_id": patient.patient_external_id,
@@ -238,7 +212,7 @@ async def quick_mri_diagnosis(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Lỗi quick MRI diagnosis: {exc}") from exc
+        raise HTTPException(status_code=500, detail=f"Lá»—i quick MRI diagnosis: {exc}") from exc
 
 
 @router.get("/quick-mri/{image_id}/summary")
@@ -249,7 +223,7 @@ def quick_mri_summary(
 ):
     image = db.query(models.Image).filter(models.Image.id == image_id).first()
     if not image:
-        raise HTTPException(status_code=404, detail="Không tìm thấy ảnh MRI")
+        raise HTTPException(status_code=404, detail="KhÃ´ng tÃ¬m tháº¥y áº£nh MRI")
 
     patient = db.query(models.Patient).filter(models.Patient.id == image.patient_id).first()
     task = (
@@ -304,7 +278,8 @@ def notifications(
     )
     items = []
     if low_confidence:
-        items.append({"type": "review_required", "message": f"Có {low_confidence} ca confidence thấp cần review."})
+        items.append({"type": "review_required", "message": f"CÃ³ {low_confidence} ca confidence tháº¥p cáº§n review."})
     if stale_risk:
-        items.append({"type": "stale_risk", "message": f"Có {stale_risk} ca không phát hiện u nhưng vẫn có risk score."})
+        items.append({"type": "stale_risk", "message": f"CÃ³ {stale_risk} ca khÃ´ng phÃ¡t hiá»‡n u nhÆ°ng váº«n cÃ³ risk score."})
     return {"items": items}
+

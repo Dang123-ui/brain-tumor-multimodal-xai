@@ -69,6 +69,64 @@ def run_migrations():
         "CREATE INDEX IF NOT EXISTS ix_classification_reviews_image_id ON classification_reviews(image_id);",
         "CREATE INDEX IF NOT EXISTS ix_classification_reviews_patient_id ON classification_reviews(patient_id);",
         "CREATE INDEX IF NOT EXISTS ix_classification_reviews_user_id ON classification_reviews(user_id);",
+        """
+        CREATE TABLE IF NOT EXISTS agent_conversations (
+            id SERIAL PRIMARY KEY,
+            thread_id VARCHAR UNIQUE NOT NULL,
+            user_id INTEGER REFERENCES users(id),
+            patient_id INTEGER REFERENCES patients(id),
+            image_id INTEGER REFERENCES images(id),
+            title TEXT,
+            status VARCHAR DEFAULT 'active',
+            summary TEXT,
+            metadata_json JSON,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            deleted_at TIMESTAMP
+        );
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_agent_conversations_thread_id ON agent_conversations(thread_id);",
+        "CREATE INDEX IF NOT EXISTS ix_agent_conversations_user_id ON agent_conversations(user_id);",
+        "CREATE INDEX IF NOT EXISTS ix_agent_conversations_patient_id ON agent_conversations(patient_id);",
+        "CREATE INDEX IF NOT EXISTS ix_agent_conversations_image_id ON agent_conversations(image_id);",
+        "CREATE INDEX IF NOT EXISTS ix_agent_conversations_status ON agent_conversations(status);",
+        """
+        CREATE TABLE IF NOT EXISTS agent_messages (
+            id SERIAL PRIMARY KEY,
+            thread_id VARCHAR NOT NULL,
+            user_id INTEGER REFERENCES users(id),
+            role VARCHAR NOT NULL,
+            content TEXT,
+            message_type VARCHAR DEFAULT 'text',
+            metadata_json JSON,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            deleted_at TIMESTAMP
+        );
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_agent_messages_thread_id ON agent_messages(thread_id);",
+        "CREATE INDEX IF NOT EXISTS ix_agent_messages_user_id ON agent_messages(user_id);",
+        "CREATE INDEX IF NOT EXISTS ix_agent_messages_created_at ON agent_messages(created_at);",
+        """
+        CREATE TABLE IF NOT EXISTS agent_audit_logs (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id),
+            patient_id INTEGER REFERENCES patients(id),
+            image_id INTEGER REFERENCES images(id),
+            thread_id VARCHAR,
+            action VARCHAR NOT NULL,
+            tool_name VARCHAR,
+            before_value JSON,
+            after_value JSON,
+            metadata_json JSON,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_agent_audit_logs_user_id ON agent_audit_logs(user_id);",
+        "CREATE INDEX IF NOT EXISTS ix_agent_audit_logs_patient_id ON agent_audit_logs(patient_id);",
+        "CREATE INDEX IF NOT EXISTS ix_agent_audit_logs_image_id ON agent_audit_logs(image_id);",
+        "CREATE INDEX IF NOT EXISTS ix_agent_audit_logs_thread_id ON agent_audit_logs(thread_id);",
+        "CREATE INDEX IF NOT EXISTS ix_agent_audit_logs_action ON agent_audit_logs(action);",
+        "CREATE INDEX IF NOT EXISTS ix_agent_audit_logs_created_at ON agent_audit_logs(created_at);",
     ]
     with engine.begin() as conn:
         for query in migrations:

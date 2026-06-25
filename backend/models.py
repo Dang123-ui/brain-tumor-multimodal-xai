@@ -260,3 +260,53 @@ class AccessLog(Base):
     status_code = Column(Integer)
 
     user = relationship("User", back_populates="access_logs")
+
+
+class AgentConversation(Base):
+    """Chat thread metadata for the NeuroDiagnosis Agent."""
+    __tablename__ = "agent_conversations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    thread_id = Column(String, unique=True, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=True, index=True)
+    image_id = Column(Integer, ForeignKey("images.id"), nullable=True, index=True)
+    title = Column(Text, nullable=True)
+    status = Column(String, default="active", index=True)
+    summary = Column(Text, nullable=True)
+    metadata_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    deleted_at = Column(DateTime, nullable=True)
+
+
+class AgentMessage(Base):
+    """Persisted chat messages for short-term memory and auditability."""
+    __tablename__ = "agent_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    thread_id = Column(String, index=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    role = Column(String, nullable=False)
+    content = Column(Text, nullable=True)
+    message_type = Column(String, default="text")
+    metadata_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
+    deleted_at = Column(DateTime, nullable=True)
+
+
+class AgentAuditLog(Base):
+    """Audit trail for sensitive Agent actions."""
+    __tablename__ = "agent_audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=True, index=True)
+    image_id = Column(Integer, ForeignKey("images.id"), nullable=True, index=True)
+    thread_id = Column(String, nullable=True, index=True)
+    action = Column(String, nullable=False, index=True)
+    tool_name = Column(String, nullable=True)
+    before_value = Column(JSON, nullable=True)
+    after_value = Column(JSON, nullable=True)
+    metadata_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
