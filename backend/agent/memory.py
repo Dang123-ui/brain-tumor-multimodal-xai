@@ -1,3 +1,4 @@
+import datetime
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session
@@ -89,3 +90,103 @@ def load_recent_messages(db: Session, thread_id: str, limit: int = 12) -> list[d
         for row in reversed(rows)
     ]
 
+
+def list_conversations(db: Session, user_id: Optional[int], limit: int = 30) -> list[models.AgentConversation]:
+    query = db.query(models.AgentConversation).filter(models.AgentConversation.deleted_at.is_(None))
+    if user_id:
+        query = query.filter(models.AgentConversation.user_id == user_id)
+    return query.order_by(models.AgentConversation.updated_at.desc()).limit(limit).all()
+
+
+def load_conversation_messages(db: Session, thread_id: str, limit: int = 100) -> list[models.AgentMessage]:
+    return (
+        db.query(models.AgentMessage)
+        .filter(
+            models.AgentMessage.thread_id == thread_id,
+            models.AgentMessage.deleted_at.is_(None),
+        )
+        .order_by(models.AgentMessage.created_at.asc())
+        .limit(limit)
+        .all()
+    )
+
+
+def soft_delete_conversation(db: Session, thread_id: str) -> bool:
+    now = datetime.datetime.utcnow()
+    conversation = (
+        db.query(models.AgentConversation)
+        .filter(models.AgentConversation.thread_id == thread_id)
+        .first()
+    )
+    if not conversation:
+        return False
+    conversation.deleted_at = now
+    (
+        db.query(models.AgentMessage)
+        .filter(models.AgentMessage.thread_id == thread_id)
+        .update({"deleted_at": now}, synchronize_session=False)
+    )
+    db.commit()
+    return True
+
+
+def trim_messages(db: Session, thread_id: str, keep_last: int = 20) -> int:
+    rows = (
+        db.query(models.AgentMessage)
+        .filter(
+            models.AgentMessage.thread_id == thread_id,
+            models.AgentMessage.deleted_at.is_(None),
+        )
+        .order_by(models.AgentMessage.created_at.desc())
+        .all()
+    )
+    to_delete = rows[keep_last:]
+    now = datetime.datetime.utcnow()
+    for row in to_delete:
+        row.deleted_at = now
+    db.commit()
+    return len(to_delete)
+
+
+def update_conversation_summary(db: Session, thread_id: str, summary: str) -> bool:
+    conversation = (
+        db.query(models.AgentConversation)
+        .filter(models.AgentConversation.thread_id == thread_id)
+        .first()
+    )
+    if not conversation:
+        return False
+    conversation.summary = summary
+    conversation.updated_at = datetime.datetime.utcnow()
+    db.commit()
+    return True
+
+
+def save_audit_log(
+    db: Session,
+    *,
+    user_id: Optional[int],
+    patient_id: Optional[int] = None,
+    image_id: Optional[int] = None,
+    thread_id: Optional[str] = None,
+    action: str,
+    tool_name: Optional[str] = None,
+    before_value: Optional[dict[str, Any]] = None,
+    after_value: Optional[dict[str, Any]] = None,
+    metadata: Optional[dict[str, Any]] = None,
+) -> models.AgentAuditLog:
+    row = models.AgentAuditLog(
+        user_id=user_id,
+        patient_id=patient_id,
+        image_id=image_id,
+        thread_id=thread_id,
+        action=action,
+        tool_name=tool_name,
+        before_value=before_value,
+        after_value=after_value,
+        metadata_json=metadata,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row

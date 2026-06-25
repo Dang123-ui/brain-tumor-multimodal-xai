@@ -2,7 +2,6 @@ from typing import Any, Optional, TypedDict
 
 
 class AgentState(TypedDict, total=False):
-    db: Any
     thread_id: str
     user_id: Optional[int]
     role: Optional[str]
@@ -14,5 +13,6 @@ class AgentState(TypedDict, total=False):
     intent: str
     actions: list[dict[str, Any]]
     tool_results: dict[str, Any]
+    long_memory: list[dict[str, Any]]
     final_response: str
     error: Optional[str]

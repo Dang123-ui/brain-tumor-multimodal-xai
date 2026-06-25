@@ -11,6 +11,14 @@ from sqlalchemy.orm import Session
 import crud
 import models
 from agent.graph import run_agent
+from agent.llm import get_agent_model
+from agent.memory import (
+    list_conversations,
+    load_conversation_messages,
+    soft_delete_conversation,
+    trim_messages,
+    update_conversation_summary,
+)
 from agent.schemas import AgentChatRequest, AgentChatResponse
 from database import get_db
 from routers.inference import _create_inference_task
@@ -27,26 +35,34 @@ router = APIRouter(prefix="/agent", tags=["Agent"])
 BUCKET_NAME = os.getenv("MINIO_BUCKET") or os.getenv("R2_BUCKET") or "medical-data"
 
 
+def _current_user_id(current_user: dict) -> int | None:
+    raw = current_user.get("user_id") or current_user.get("sub") or current_user.get("id")
+    try:
+        return int(raw)
+    except Exception:
+        return None
+
+
 def _patient_display(patient: models.Patient) -> str:
     code = patient.patient_external_id or str(patient.id)
-    name = patient.name or "Bá»‡nh nhÃ¢n"
+    name = patient.name or "Bệnh nhân"
     return f"{name} ({code})"
 
 
 def _summarize_image_result(result: dict[str, Any] | None, patient: models.Patient | None = None) -> str:
     patient_text = f" cho {_patient_display(patient)}" if patient else ""
     if not result:
-        return f"ÄÃ£ táº¡o task phÃ¢n tÃ­ch MRI{patient_text}. TÃ´i sáº½ tiáº¿p tá»¥c theo dÃµi tiáº¿n trÃ¬nh vÃ  tÃ³m táº¯t khi cÃ³ káº¿t quáº£."
+        return f"Đã tạo task phân tích MRI{patient_text}. Tôi sẽ tiếp tục theo dõi tiến trình và tóm tắt khi có kết quả."
 
     if result.get("no_tumor_detected"):
         return (
-            f"ÄÃ£ cháº¡y xong MRI pipeline{patient_text}. Káº¿t quáº£: khÃ´ng phÃ¡t hiá»‡n khá»‘i u trÃªn áº£nh MRI nÃ y. "
-            "KhÃ´ng cháº¡y tiÃªn lÆ°á»£ng/risk score vÃ¬ khÃ´ng cÃ³ khá»‘i u Ä‘á»ƒ Ä‘Ã¡nh giÃ¡."
+            f"Đã chạy xong MRI pipeline{patient_text}. Kết quả: không phát hiện khối u trên ảnh MRI này. "
+            "Không chạy tiên lượng/risk score vì không có khối u để đánh giá."
         )
 
-    label = result.get("tumor_label") or "chÆ°a cÃ³ nhÃ£n"
+    label = result.get("tumor_label") or "chưa có nhãn"
     confidence = result.get("classification_confidence")
-    confidence_text = f" vá»›i confidence {confidence * 100:.2f}%" if isinstance(confidence, (int, float)) else ""
+    confidence_text = f" với confidence {confidence * 100:.2f}%" if isinstance(confidence, (int, float)) else ""
     xai_parts = []
     if result.get("detection_xai_data_url"):
         xai_parts.append("ODAM")
@@ -54,10 +70,10 @@ def _summarize_image_result(result: dict[str, Any] | None, patient: models.Patie
         xai_parts.append("Seg-Eigen-CAM")
     if result.get("classification_xai_data_url"):
         xai_parts.append("Finer-CAM")
-    xai_text = f" ÄÃ£ sinh XAI: {', '.join(xai_parts)}." if xai_parts else ""
+    xai_text = f" Đã sinh XAI: {', '.join(xai_parts)}." if xai_parts else ""
     return (
-        f"ÄÃ£ cháº¡y xong MRI pipeline{patient_text}. Káº¿t quáº£: phÃ¢n loáº¡i {label}{confidence_text}."
-        f"{xai_text} TÃ´i sáº½ má»Ÿ trang káº¿t quáº£ chi tiáº¿t Ä‘á»ƒ bÃ¡c sÄ© xem áº£nh, mask, heatmap vÃ  xÃ¡c nháº­n láº¡i nhÃ£n náº¿u cáº§n."
+        f"Đã chạy xong MRI pipeline{patient_text}. Kết quả: phân loại {label}{confidence_text}."
+        f"{xai_text} Tôi sẽ mở trang kết quả chi tiết để bác sĩ xem ảnh, mask, heatmap và xác nhận lại nhãn nếu cần."
     )
 
 
@@ -146,6 +162,103 @@ def search_patients(
     }
 
 
+@router.get("/conversations")
+def get_conversations(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = _current_user_id(current_user)
+    conversations = list_conversations(db, user_id=user_id)
+    return {
+        "items": [
+            {
+                "thread_id": item.thread_id,
+                "patient_id": item.patient_id,
+                "image_id": item.image_id,
+                "title": item.title,
+                "status": item.status,
+                "summary": item.summary,
+                "created_at": item.created_at,
+                "updated_at": item.updated_at,
+            }
+            for item in conversations
+        ]
+    }
+
+
+@router.get("/conversations/{thread_id}")
+def get_conversation(
+    thread_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    messages = load_conversation_messages(db, thread_id)
+    return {
+        "thread_id": thread_id,
+        "messages": [
+            {
+                "id": message.id,
+                "role": message.role,
+                "content": message.content,
+                "message_type": message.message_type,
+                "metadata": message.metadata_json,
+                "created_at": message.created_at,
+            }
+            for message in messages
+        ],
+    }
+
+
+@router.delete("/conversations/{thread_id}")
+def delete_conversation(
+    thread_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    deleted = soft_delete_conversation(db, thread_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Không tìm thấy hội thoại")
+    return {"deleted": True}
+
+
+@router.post("/conversations/{thread_id}/trim")
+def trim_conversation(
+    thread_id: str,
+    keep_last: int = 20,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    deleted_count = trim_messages(db, thread_id, keep_last=max(4, min(keep_last, 100)))
+    return {"thread_id": thread_id, "trimmed_messages": deleted_count}
+
+
+@router.post("/conversations/{thread_id}/summarize")
+def summarize_conversation(
+    thread_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    messages = load_conversation_messages(db, thread_id, limit=80)
+    if not messages:
+        raise HTTPException(status_code=404, detail="Không có tin nhắn để tóm tắt")
+
+    transcript = "\n".join(f"{msg.role}: {msg.content}" for msg in messages if msg.content)
+    try:
+        model = get_agent_model()
+        response = model.invoke(
+            [
+                ("system", "Tóm tắt hội thoại y khoa bằng tiếng Việt, ngắn gọn, giữ các quyết định quan trọng."),
+                ("human", transcript),
+            ]
+        )
+        summary = getattr(response, "content", str(response))
+    except Exception as exc:
+        summary = f"Không thể gọi LLM để tóm tắt: {exc}"
+
+    update_conversation_summary(db, thread_id, summary)
+    return {"thread_id": thread_id, "summary": summary}
+
+
 @router.post("/quick-mri")
 async def quick_mri_diagnosis(
     patient_id: Optional[str] = Form(None),
@@ -158,13 +271,13 @@ async def quick_mri_diagnosis(
             status_code=409,
             detail={
                 "type": "select_patient",
-                "reason": "Cáº§n chá»n bá»‡nh nhÃ¢n Ä‘á»ƒ lÆ°u áº£nh MRI vÃ  káº¿t quáº£ cháº©n Ä‘oÃ¡n.",
+                "reason": "Cần chọn bệnh nhân để lưu ảnh MRI và kết quả chẩn đoán.",
             },
         )
 
     patient = crud.get_patient_by_id_or_external(db, patient_id)
     if not patient:
-        raise HTTPException(status_code=404, detail=f"KhÃ´ng tÃ¬m tháº¥y bá»‡nh nhÃ¢n '{patient_id}'")
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy bệnh nhân '{patient_id}'")
 
     ensure_bucket_exists(BUCKET_NAME)
 
@@ -198,7 +311,7 @@ async def quick_mri_diagnosis(
         )
 
         return {
-            "message": "ÄÃ£ upload MRI qua chatbox vÃ  táº¡o task MRI pipeline.",
+            "message": "Đã upload MRI qua chatbox và tạo task MRI pipeline.",
             "patient": {
                 "id": patient.id,
                 "patient_external_id": patient.patient_external_id,
@@ -212,7 +325,7 @@ async def quick_mri_diagnosis(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Lá»—i quick MRI diagnosis: {exc}") from exc
+        raise HTTPException(status_code=500, detail=f"Lỗi quick MRI diagnosis: {exc}") from exc
 
 
 @router.get("/quick-mri/{image_id}/summary")
@@ -223,7 +336,7 @@ def quick_mri_summary(
 ):
     image = db.query(models.Image).filter(models.Image.id == image_id).first()
     if not image:
-        raise HTTPException(status_code=404, detail="KhÃ´ng tÃ¬m tháº¥y áº£nh MRI")
+        raise HTTPException(status_code=404, detail="Không tìm thấy ảnh MRI")
 
     patient = db.query(models.Patient).filter(models.Patient.id == image.patient_id).first()
     task = (
@@ -278,8 +391,8 @@ def notifications(
     )
     items = []
     if low_confidence:
-        items.append({"type": "review_required", "message": f"CÃ³ {low_confidence} ca confidence tháº¥p cáº§n review."})
+        items.append({"type": "review_required", "message": f"Có {low_confidence} ca confidence thấp cần review."})
     if stale_risk:
-        items.append({"type": "stale_risk", "message": f"CÃ³ {stale_risk} ca khÃ´ng phÃ¡t hiá»‡n u nhÆ°ng váº«n cÃ³ risk score."})
+        items.append({"type": "stale_risk", "message": f"Có {stale_risk} ca không phát hiện u nhưng vẫn có risk score."})
     return {"items": items}
 
