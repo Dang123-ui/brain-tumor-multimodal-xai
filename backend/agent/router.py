@@ -43,6 +43,27 @@ def _current_user_id(current_user: dict) -> int | None:
         return None
 
 
+def _content_to_text(content: Any) -> str:
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict):
+                text = item.get("text") or item.get("content")
+                if text:
+                    parts.append(str(text))
+            else:
+                parts.append(str(item))
+        return "\n".join(parts).strip()
+    if isinstance(content, dict):
+        text = content.get("text") or content.get("content")
+        return str(text if text is not None else content)
+    return str(content)
+
+
 def _patient_display(patient: models.Patient) -> str:
     code = patient.patient_external_id or str(patient.id)
     name = patient.name or "Bệnh nhân"
@@ -251,7 +272,7 @@ def summarize_conversation(
                 ("human", transcript),
             ]
         )
-        summary = getattr(response, "content", str(response))
+        summary = _content_to_text(getattr(response, "content", response))
     except Exception as exc:
         summary = f"Không thể gọi LLM để tóm tắt: {exc}"
 
