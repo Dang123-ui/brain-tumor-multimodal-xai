@@ -346,6 +346,7 @@ export function AgentFloatingWidget() {
               id: "agent-task-progress",
               role: "tool",
               content: `${status} ${percent ? `(${percent}%)` : ""}`,
+              createdAt: new Date().toISOString(),
             },
           ]);
         },
