@@ -9,6 +9,26 @@ export type AgentChatResponse = {
   actions: Array<Record<string, unknown>>;
 };
 
+export type AgentConversation = {
+  thread_id: string;
+  patient_id?: number | null;
+  image_id?: number | null;
+  title?: string | null;
+  status: string;
+  summary?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type AgentStoredMessage = {
+  id: number;
+  role: AgentMessageRole;
+  content?: string | null;
+  message_type?: string;
+  metadata?: Record<string, unknown> | null;
+  created_at?: string | null;
+};
+
 export type AgentPatient = {
   id: number;
   patient_external_id?: string | null;
@@ -74,5 +94,14 @@ export const agentApi = {
       "/agent/notifications",
     );
   },
-};
 
+  conversations: async () => {
+    return api.get<{ items: AgentConversation[] }>("/agent/conversations");
+  },
+
+  conversationMessages: async (threadId: string) => {
+    return api.get<{ thread_id: string; messages: AgentStoredMessage[] }>(
+      `/agent/conversations/${encodeURIComponent(threadId)}`,
+    );
+  },
+};

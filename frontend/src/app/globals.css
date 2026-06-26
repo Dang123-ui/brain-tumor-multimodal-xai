@@ -106,23 +106,23 @@ body {
   animation-play-state: running;
 }
 
-.agent-shell::after {
+  .agent-shell::after {
   content: "";
   position: absolute;
   display: block;
   inset: 1px;
   border-radius: 23px;
-  background: rgba(255, 255, 255, 0.72);
+    background: rgba(246, 250, 249, 0.78);
   backdrop-filter: blur(24px);
 }
 
-.agent-content {
+  .agent-content {
   position: relative;
   z-index: 1;
   width: calc(100% - 4px);
   height: calc(100% - 4px);
   border-radius: 22px;
-  background: #ffffff;
+    background: #f6faf9;
   color: #0f172a;
   overflow: hidden;
 }
