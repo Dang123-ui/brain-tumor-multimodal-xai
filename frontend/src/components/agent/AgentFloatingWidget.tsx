@@ -216,6 +216,8 @@ export function AgentFloatingWidget() {
   const [historyItems, setHistoryItems] = useState<AgentConversation[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [conversationToDelete, setConversationToDelete] =
+    useState<AgentConversation | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
@@ -304,7 +306,7 @@ export function AgentFloatingWidget() {
     }
   };
 
-  const startNewChat = () => {
+  function startNewChat() {
     setActiveThreadId(undefined);
     setMessages([
       newMessage(
@@ -313,6 +315,26 @@ export function AgentFloatingWidget() {
       ),
     ]);
     setShowHistory(false);
+  }
+
+  const confirmDeleteConversation = async () => {
+    if (!conversationToDelete) return;
+    const threadId = conversationToDelete.thread_id;
+    setHistoryLoading(true);
+    try {
+      await agentApi.deleteConversation(threadId);
+      setHistoryItems((items) =>
+        items.filter((item) => item.thread_id !== threadId),
+      );
+      if (activeThreadId === threadId) {
+        startNewChat();
+      }
+      setConversationToDelete(null);
+    } catch {
+      append(newMessage("error", "Không thể xóa hội thoại này."));
+    } finally {
+      setHistoryLoading(false);
+    }
   };
 
   const runQuickMri = async (file: File, patientId?: string) => {
@@ -512,51 +534,85 @@ export function AgentFloatingWidget() {
           </div>
         </header>
 
-        {showHistory && (
-          <div className="border-b border-[#E2E8F0] bg-white px-4 py-3">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-[#0F172A]">Lịch sử chat</h3>
-              <button
-                type="button"
-                onClick={() => void refreshHistory()}
-                className="text-xs font-medium text-[#0F9F8F] hover:underline"
-              >
-                Tải lại
-              </button>
-            </div>
-            <div className="max-h-48 space-y-2 overflow-y-auto">
-              {historyLoading && (
-                <div className="flex items-center gap-2 text-sm text-[#64748B]">
-                  <Loader2 className="h-4 w-4 animate-spin text-[#0F9F8F]" />
-                  Đang tải lịch sử...
+        <div className="flex min-h-0 flex-1 bg-[#F6FAF9]">
+          {showHistory && (
+            <aside className="flex w-72 shrink-0 flex-col border-r border-[#E2E8F0] bg-white">
+              <div className="border-b border-[#E2E8F0] px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-[#0F172A]">Lịch sử chat</h3>
+                  <button
+                    type="button"
+                    onClick={() => void refreshHistory()}
+                    className="text-xs font-medium text-[#0F9F8F] hover:underline"
+                  >
+                    Tải lại
+                  </button>
                 </div>
-              )}
-              {!historyLoading && !historyItems.length && (
-                <div className="rounded-xl border border-[#E2E8F0] bg-[#F6FAF9] px-3 py-3 text-sm text-[#64748B]">
-                  Chưa có hội thoại đã lưu.
-                </div>
-              )}
-              {historyItems.map((item) => (
                 <button
-                  key={item.thread_id}
                   type="button"
-                  onClick={() => void loadConversation(item.thread_id)}
-                  className="block w-full rounded-xl border border-[#E2E8F0] bg-[#F6FAF9] px-3 py-2 text-left transition hover:border-[#0F9F8F] hover:bg-white"
+                  onClick={startNewChat}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-[#E2E8F0] bg-[#F6FAF9] px-3 py-2 text-sm font-medium text-[#0F172A] transition hover:border-[#0F9F8F] hover:bg-white"
                 >
-                  <div className="truncate text-sm font-medium text-[#0F172A]">
-                    {conversationTitle(item)}
-                  </div>
-                  <div className="mt-1 flex items-center gap-2 text-xs text-[#64748B]">
-                    <Clock3 className="h-3.5 w-3.5" />
-                    {formatChatTime(item.updated_at || item.created_at || undefined)}
-                  </div>
+                  <Plus className="h-4 w-4" />
+                  Chat mới
                 </button>
-              ))}
-            </div>
-          </div>
-        )}
+              </div>
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+                {historyLoading && (
+                  <div className="flex items-center gap-2 text-sm text-[#64748B]">
+                    <Loader2 className="h-4 w-4 animate-spin text-[#0F9F8F]" />
+                    Đang tải lịch sử...
+                  </div>
+                )}
+                {!historyLoading && !historyItems.length && (
+                  <div className="rounded-xl border border-[#E2E8F0] bg-[#F6FAF9] px-3 py-3 text-sm text-[#64748B]">
+                    Chưa có hội thoại đã lưu.
+                  </div>
+                )}
+                {historyItems.map((item) => {
+                  const active = activeThreadId === item.thread_id;
+                  return (
+                    <div
+                      key={item.thread_id}
+                      className={[
+                        "group rounded-xl border bg-[#F6FAF9] transition",
+                        active
+                          ? "border-[#0F9F8F] bg-white"
+                          : "border-[#E2E8F0] hover:border-[#0F9F8F] hover:bg-white",
+                      ].join(" ")}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => void loadConversation(item.thread_id)}
+                        className="block w-full px-3 pb-2 pt-3 text-left"
+                      >
+                        <div className="truncate text-sm font-medium text-[#0F172A]">
+                          {conversationTitle(item)}
+                        </div>
+                        <div className="mt-1 flex items-center gap-2 text-xs text-[#64748B]">
+                          <Clock3 className="h-3.5 w-3.5" />
+                          {formatChatTime(item.updated_at || item.created_at || undefined)}
+                        </div>
+                      </button>
+                      <div className="flex justify-end px-2 pb-2">
+                        <button
+                          type="button"
+                          onClick={() => setConversationToDelete(item)}
+                          className="rounded-lg p-1.5 text-[#64748B] opacity-0 transition hover:bg-red-50 hover:text-[#DC2626] group-hover:opacity-100"
+                          title="Xóa hội thoại"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </aside>
+          )}
 
-        <div ref={listRef} className="flex-1 space-y-4 overflow-y-auto bg-[#F6FAF9] p-4">
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div ref={listRef} className="flex-1 space-y-4 overflow-y-auto bg-[#F6FAF9] p-4">
           {messages.map((message) => (
             <div
               key={message.id}
@@ -609,7 +665,7 @@ export function AgentFloatingWidget() {
               Agent đang xử lý...
             </div>
           )}
-        </div>
+            </div>
 
         {showPatientSearch && (
           <div className="border-t border-[#E2E8F0] bg-[#F6FAF9] px-4 py-3">
@@ -697,7 +753,43 @@ export function AgentFloatingWidget() {
             </button>
           </div>
         </form>
+          </div>
+        </div>
       </div>
+
+      {conversationToDelete && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#0F172A]/30 px-4">
+          <div className="w-full max-w-sm rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-2xl">
+            <h3 className="text-base font-semibold text-[#0F172A]">
+              Xóa lịch sử chat?
+            </h3>
+            <p className="mt-2 text-sm leading-6 text-[#64748B]">
+              Hội thoại này sẽ được ẩn khỏi lịch sử chat. Bạn cần xác nhận trước
+              khi xóa.
+            </p>
+            <div className="mt-4 rounded-xl bg-[#F6FAF9] px-3 py-2 text-sm text-[#0F172A]">
+              {conversationTitle(conversationToDelete)}
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConversationToDelete(null)}
+                className="rounded-xl border border-[#E2E8F0] px-4 py-2 text-sm font-medium text-[#0F172A] hover:bg-[#F6FAF9]"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmDeleteConversation()}
+                className="rounded-xl bg-[#DC2626] px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:bg-slate-300"
+                disabled={historyLoading}
+              >
+                {historyLoading ? "Đang xóa..." : "Xóa"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

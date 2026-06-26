@@ -104,4 +104,10 @@ export const agentApi = {
       `/agent/conversations/${encodeURIComponent(threadId)}`,
     );
   },
+
+  deleteConversation: async (threadId: string) => {
+    return api.delete<{ deleted: boolean }>(
+      `/agent/conversations/${encodeURIComponent(threadId)}`,
+    );
+  },
 };
