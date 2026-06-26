@@ -159,22 +159,6 @@ def serialize_analysis_with_visuals(
         {"label": "Detection (BBox)", "url": _stored_data_url(payload.get("bbox_image_path"))},
         {"label": "Segmentation (Mask)", "url": mask_overlay},
         {"label": "Tumor contour", "url": contour_overlay},
-        {
-            "label": "XAI Detection",
-            "url": _stored_data_url(payload.get("detection_xai_path") or payload.get("odam_path") or analysis.odam_path),
-        },
-        {
-            "label": "XAI Segmentation",
-            "url": _stored_data_url(payload.get("segmentation_xai_path") or payload.get("seg_eigen_cam_path") or analysis.seg_eigen_cam_path),
-        },
-        {
-            "label": "XAI Classification",
-            "url": _stored_data_url(payload.get("classification_xai_path") or analysis.finer_cam_path),
-        },
-        {
-            "label": "XAI Prognosis",
-            "url": _stored_data_url(payload.get("multimodal_risk_xai_path") or payload.get("gradcam_heatmap_path") or analysis.gradcam_path),
-        },
     ]
 
     item["scan_date"] = image.scan_date.isoformat() if image and image.scan_date else item.get("created_at")

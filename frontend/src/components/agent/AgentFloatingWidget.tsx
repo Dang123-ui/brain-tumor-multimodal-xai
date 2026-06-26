@@ -28,6 +28,10 @@ import {
 } from "lucide-react";
 import { apiService } from "@/lib/api";
 import {
+  ImagePreviewModal,
+  ImagePreviewState,
+} from "@/components/ui/ImagePreviewModal";
+import {
   agentApi,
   AgentConversation,
   AgentMessageRole,
@@ -267,6 +271,7 @@ export function AgentFloatingWidget() {
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [conversationToDelete, setConversationToDelete] =
     useState<AgentConversation | null>(null);
+  const [previewImage, setPreviewImage] = useState<ImagePreviewState | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
@@ -698,12 +703,24 @@ export function AgentFloatingWidget() {
                               {visual.label}
                             </figcaption>
                           </div>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={visual.url}
-                            alt={visual.label}
-                            className="h-44 w-full bg-black object-contain"
-                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPreviewImage({
+                                title: `${visual.imageId ? `ID ${visual.imageId} - ` : ""}${visual.label}`,
+                                src: visual.url,
+                              })
+                            }
+                            className="block w-full cursor-zoom-in bg-black"
+                            title="Nhấp để phóng to ảnh"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={visual.url}
+                              alt={visual.label}
+                              className="h-44 w-full object-contain transition hover:opacity-90"
+                            />
+                          </button>
                         </figure>
                       ))}
                     </div>
@@ -865,6 +882,12 @@ export function AgentFloatingWidget() {
             </div>
           </div>
         </div>
+      )}
+      {previewImage && (
+        <ImagePreviewModal
+          preview={previewImage}
+          onClose={() => setPreviewImage(null)}
+        />
       )}
     </section>
   );
