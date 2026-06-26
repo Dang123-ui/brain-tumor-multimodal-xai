@@ -3,7 +3,7 @@ from typing import Any, Optional
 from sqlalchemy.orm import Session
 
 import models
-from agent.tools.patient_tools import serialize_analysis
+from agent.tools.patient_tools import serialize_analysis_with_visuals
 
 
 def get_image_analysis(db: Session, image_id: Optional[int]) -> dict[str, Any]:
@@ -30,6 +30,5 @@ def get_image_analysis(db: Session, image_id: Optional[int]) -> dict[str, Any]:
             "is_series": image.is_series,
             "num_slices": image.num_slices,
         },
-        "analysis": serialize_analysis(analysis),
+        "analysis": serialize_analysis_with_visuals(db, analysis),
     }
-

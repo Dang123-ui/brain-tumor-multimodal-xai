@@ -87,6 +87,20 @@ def _content_to_text(content: Any) -> str:
     return str(content)
 
 
+def _strip_visual_data(value: Any) -> Any:
+    if isinstance(value, dict):
+        cleaned = {}
+        for key, item in value.items():
+            if key == "url" and isinstance(item, str) and item.startswith("data:image/"):
+                cleaned[key] = "[image_data_url omitted]"
+            else:
+                cleaned[key] = _strip_visual_data(item)
+        return cleaned
+    if isinstance(value, list):
+        return [_strip_visual_data(item) for item in value]
+    return value
+
+
 def _make_load_tool_context(db: Session):
     def _load_tool_context(state: AgentState) -> AgentState:
         intent = state.get("intent") or "general"
@@ -133,7 +147,7 @@ def _make_generate_response(db: Session):
             "patient_id": state.get("patient_id"),
             "image_id": state.get("image_id"),
             "selected_region": state.get("selected_region"),
-            "tool_results": state.get("tool_results", {}),
+            "tool_results": _strip_visual_data(state.get("tool_results", {})),
             "recent_messages": recent_messages,
             "long_memory": long_memory,
         }

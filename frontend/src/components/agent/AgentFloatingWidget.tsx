@@ -42,12 +42,19 @@ type ChatMessage = {
   content: string;
   createdAt: string;
   responseMs?: number;
+  visuals?: ChatVisual[];
+};
+
+type ChatVisual = {
+  label: string;
+  url: string;
+  imageId?: number;
 };
 
 function newMessage(
   role: AgentMessageRole,
   content: string,
-  options?: { createdAt?: string; responseMs?: number },
+  options?: { createdAt?: string; responseMs?: number; visuals?: ChatVisual[] },
 ): ChatMessage {
   return {
     id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -55,7 +62,49 @@ function newMessage(
     content,
     createdAt: options?.createdAt || new Date().toISOString(),
     responseMs: options?.responseMs,
+    visuals: options?.visuals,
   };
+}
+
+function isVisual(value: unknown): value is ChatVisual {
+  if (typeof value !== "object" || value === null) return false;
+  const item = value as { label?: unknown; url?: unknown };
+  return typeof item.label === "string" && typeof item.url === "string";
+}
+
+function collectVisualsFromToolResults(toolResults?: Record<string, unknown>) {
+  const visuals: ChatVisual[] = [];
+  const seen = new Set<string>();
+
+  const visit = (value: unknown, imageId?: number) => {
+    if (!value) return;
+    if (Array.isArray(value)) {
+      value.forEach((item) => visit(item, imageId));
+      return;
+    }
+    if (typeof value !== "object") return;
+    const record = value as Record<string, unknown>;
+    const resolvedImageId =
+      typeof record.image_id === "number" ? record.image_id : imageId;
+
+    if (Array.isArray(record.visuals)) {
+      record.visuals.filter(isVisual).forEach((visual) => {
+        const key = `${resolvedImageId || ""}:${visual.label}:${visual.url.slice(0, 80)}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          visuals.push({ ...visual, imageId: resolvedImageId });
+        }
+      });
+    }
+
+    Object.entries(record).forEach(([key, item]) => {
+      if (key === "visuals") return;
+      visit(item, resolvedImageId);
+    });
+  };
+
+  visit(toolResults);
+  return visuals.slice(0, 12);
 }
 
 function formatChatTime(value?: string) {
@@ -295,6 +344,9 @@ export function AgentFloatingWidget() {
           .map((message) =>
             newMessage(message.role, message.content || "", {
               createdAt: message.created_at || undefined,
+              visuals: collectVisualsFromToolResults(
+                message.metadata?.tool_results as Record<string, unknown> | undefined,
+              ),
             }),
           ),
       );
@@ -439,6 +491,7 @@ export function AgentFloatingWidget() {
       append(
         newMessage("assistant", response.data.message, {
           responseMs: performance.now() - startedAt,
+          visuals: collectVisualsFromToolResults(response.data.tool_results),
         }),
       );
     } catch (error: unknown) {
@@ -632,6 +685,29 @@ export function AgentFloatingWidget() {
                   ].join(" ")}
                 >
                   <MarkdownMessage content={message.content} />
+                  {message.visuals?.length ? (
+                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      {message.visuals.map((visual, index) => (
+                        <figure
+                          key={`${visual.label}-${visual.imageId || "img"}-${index}`}
+                          className="overflow-hidden rounded-xl border border-[#E2E8F0] bg-[#F6FAF9]"
+                        >
+                          <div className="flex items-center justify-between px-3 py-2">
+                            <figcaption className="truncate text-xs font-semibold uppercase tracking-wide text-[#64748B]">
+                              {visual.imageId ? `ID ${visual.imageId} - ` : ""}
+                              {visual.label}
+                            </figcaption>
+                          </div>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={visual.url}
+                            alt={visual.label}
+                            className="h-44 w-full bg-black object-contain"
+                          />
+                        </figure>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
                 <div
                   className={`mt-1 flex items-center gap-2 text-[11px] text-[#64748B] ${

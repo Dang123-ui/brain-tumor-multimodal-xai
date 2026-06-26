@@ -7,6 +7,7 @@ export type AgentChatResponse = {
   message: string;
   intent: string;
   actions: Array<Record<string, unknown>>;
+  tool_results?: Record<string, unknown>;
 };
 
 export type AgentConversation = {
