@@ -76,9 +76,63 @@ function isVisual(value: unknown): value is ChatVisual {
   return typeof item.label === "string" && typeof item.url === "string";
 }
 
-function collectVisualsFromToolResults(toolResults?: Record<string, unknown>) {
+function shouldPreferLatestVisuals(message?: string, currentPage?: string) {
+  const normalized = (message || "").toLowerCase();
+  const latestHints = [
+    "gần nhất",
+    "gan nhat",
+    "mới nhất",
+    "moi nhat",
+    "lần cuối",
+    "lan cuoi",
+    "hiện tại",
+    "hien tai",
+    "latest",
+    "newest",
+    "most recent",
+  ];
+  if (latestHints.some((hint) => normalized.includes(hint))) {
+    return true;
+  }
+  return Boolean(currentPage?.startsWith("/results/"));
+}
+
+function shouldExpandHistoryVisuals(message?: string, currentPage?: string) {
+  const normalized = (message || "").toLowerCase();
+  const historyHints = [
+    "lịch sử",
+    "lich su",
+    "timeline",
+    "toàn bộ",
+    "toan bo",
+    "tất cả",
+    "tat ca",
+    "diễn tiến",
+    "dien tien",
+    "so sánh",
+    "so sanh",
+    "history",
+  ];
+  if (historyHints.some((hint) => normalized.includes(hint))) {
+    return true;
+  }
+  return Boolean(currentPage?.startsWith("/history/"));
+}
+
+function collectVisualsFromToolResults(
+  toolResults?: Record<string, unknown>,
+  options?: { message?: string; currentPage?: string },
+) {
   const visuals: ChatVisual[] = [];
   const seen = new Set<string>();
+  const preferLatest = shouldPreferLatestVisuals(
+    options?.message,
+    options?.currentPage,
+  );
+  const expandHistory = shouldExpandHistoryVisuals(
+    options?.message,
+    options?.currentPage,
+  );
 
   const collectFromVisualArray = (items: unknown, imageId?: number) => {
     if (!Array.isArray(items)) return false;
@@ -105,22 +159,24 @@ function collectVisualsFromToolResults(toolResults?: Record<string, unknown>) {
     const resolvedImageId =
       typeof record.image_id === "number" ? record.image_id : imageId;
 
-    const prioritizedSources = [
-      record.latest_analysis,
-      record.latest_item,
-    ];
-    for (const source of prioritizedSources) {
-      if (
-        source &&
-        typeof source === "object" &&
-        collectFromVisualArray(
-          (source as Record<string, unknown>).visuals,
-          typeof (source as Record<string, unknown>).image_id === "number"
-            ? ((source as Record<string, unknown>).image_id as number)
-            : resolvedImageId,
-        )
-      ) {
-        return;
+    if (preferLatest && !expandHistory) {
+      const prioritizedSources = [
+        record.latest_analysis,
+        record.latest_item,
+      ];
+      for (const source of prioritizedSources) {
+        if (
+          source &&
+          typeof source === "object" &&
+          collectFromVisualArray(
+            (source as Record<string, unknown>).visuals,
+            typeof (source as Record<string, unknown>).image_id === "number"
+              ? ((source as Record<string, unknown>).image_id as number)
+              : resolvedImageId,
+          )
+        ) {
+          return;
+        }
       }
     }
 
@@ -187,6 +243,7 @@ function MarkdownMessage({ content }: { content: string }) {
   const lines = content.split(/\r?\n/);
   const blocks: ReactNode[] = [];
   let bullets: string[] = [];
+  let tableLines: string[] = [];
 
   const flushBullets = () => {
     if (!bullets.length) return;
@@ -200,13 +257,67 @@ function MarkdownMessage({ content }: { content: string }) {
     bullets = [];
   };
 
+  const flushTable = () => {
+    if (tableLines.length < 2) {
+      tableLines = [];
+      return;
+    }
+    const rows = tableLines
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) =>
+        line
+          .split("|")
+          .map((cell) => cell.trim())
+          .filter((cell, index, arr) => !(index === 0 && cell === "") && !(index === arr.length - 1 && cell === "")),
+      );
+
+    const header = rows[0] || [];
+    const body = rows.slice(2);
+    blocks.push(
+      <div key={`table-${blocks.length}`} className="my-3 overflow-x-auto rounded-xl border border-[#E2E8F0] bg-white">
+        <table className="min-w-full border-collapse text-left text-sm text-[#0F172A]">
+          <thead className="bg-[#F6FAF9]">
+            <tr>
+              {header.map((cell, index) => (
+                <th key={`th-${index}`} className="border-b border-[#E2E8F0] px-3 py-2 font-semibold">
+                  {renderInlineMarkdown(cell)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {body.map((row, rowIndex) => (
+              <tr key={`tr-${rowIndex}`} className="border-b border-[#E2E8F0] last:border-b-0">
+                {row.map((cell, cellIndex) => (
+                  <td key={`td-${rowIndex}-${cellIndex}`} className="px-3 py-2 align-top">
+                    {renderInlineMarkdown(cell)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>,
+    );
+    tableLines = [];
+  };
+
   lines.forEach((line, index) => {
     const trimmed = line.trim();
     if (!trimmed) {
       flushBullets();
+      flushTable();
       blocks.push(<div key={`space-${index}`} className="h-2" />);
       return;
     }
+
+    if (trimmed.includes("|")) {
+      tableLines.push(trimmed);
+      return;
+    }
+
+    flushTable();
 
     const bullet = trimmed.match(/^[-*]\s+(.+)/);
     if (bullet) {
@@ -232,6 +343,7 @@ function MarkdownMessage({ content }: { content: string }) {
     );
   });
   flushBullets();
+  flushTable();
 
   return <div className="agent-markdown">{blocks}</div>;
 }
@@ -410,6 +522,10 @@ export function AgentFloatingWidget() {
               createdAt: message.created_at || undefined,
               visuals: collectVisualsFromToolResults(
                 message.metadata?.tool_results as Record<string, unknown> | undefined,
+                {
+                  message: message.content || "",
+                  currentPage,
+                },
               ),
             }),
           ),
@@ -567,7 +683,10 @@ export function AgentFloatingWidget() {
           onToolResult: (data) => {
             updateMessage(assistantMessage.id, (message) => ({
               ...message,
-              visuals: collectVisualsFromToolResults(data.tool_results),
+              visuals: collectVisualsFromToolResults(data.tool_results, {
+                message: content,
+                currentPage,
+              }),
             }));
           },
           onToken: (token) => {

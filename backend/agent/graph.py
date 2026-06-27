@@ -120,6 +120,34 @@ def build_response_prompt(db: Session, state: AgentState) -> str:
         "recent_messages": recent_messages,
         "long_memory": long_memory,
     }
+    message_text = (state.get("message") or "").lower()
+    current_page = str(state.get("current_page") or "")
+    history_mode = current_page.startswith("/history/") or any(
+        hint in message_text
+        for hint in [
+            "lich su",
+            "lịch sử",
+            "timeline",
+            "toan bo",
+            "toàn bộ",
+            "tat ca",
+            "tất cả",
+            "dien tien",
+            "diễn tiến",
+            "so sanh",
+            "so sánh",
+            "history",
+        ]
+    )
+    history_instruction = ""
+    if history_mode:
+        history_instruction = (
+            "\n\nYeu cau bo sung cho lich su chan doan:\n"
+            "- Neu co tool_results.items thi phai phan tich toan bo cac moc chan doan, khong chi 2 lan gan nhat.\n"
+            "- Neu can so sanh, hay viet bang Markdown hop le.\n"
+            "- Nen co cac heading: Tong quan, Timeline chan doan, Phan tich xu huong, Doi chieu AI - bac si, Phan tich XAI, Diem bat thuong, Ket luan.\n"
+            "- Neu field nao thieu thi ghi Chua co du lieu.\n"
+        )
 
     return (
         f"Tin nháº¯n bÃ¡c sÄ©: {state.get('message')}\n\n"
