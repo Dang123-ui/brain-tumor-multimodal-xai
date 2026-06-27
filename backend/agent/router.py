@@ -1,6 +1,5 @@
 ﻿import json
 import os
-import asyncio
 import uuid
 from typing import Any, Optional
 
@@ -11,7 +10,14 @@ from sqlalchemy.orm import Session
 
 import crud
 import models
-from agent.graph import run_agent
+from agent.graph import (
+    SYSTEM_PROMPT,
+    build_response_prompt,
+    finalize_agent_response,
+    prepare_agent_state,
+    run_agent,
+    run_agent_tool_steps,
+)
 from agent.llm import get_agent_model
 from agent.memory import (
     list_conversations,
@@ -59,6 +65,27 @@ def _content_to_text(content: Any) -> str:
             else:
                 parts.append(str(item))
         return "\n".join(parts).strip()
+    if isinstance(content, dict):
+        text = content.get("text") or content.get("content")
+        return str(text if text is not None else content)
+    return str(content)
+
+
+def _stream_content_to_text(content: Any) -> str:
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict):
+                text = item.get("text") or item.get("content")
+                if text is not None:
+                    parts.append(str(text))
+            else:
+                parts.append(str(item))
+        return "".join(parts)
     if isinstance(content, dict):
         text = content.get("text") or content.get("content")
         return str(text if text is not None else content)
@@ -130,7 +157,7 @@ async def chat_stream(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    result = run_agent(
+    state = prepare_agent_state(
         db=db,
         current_user=current_user,
         message=request.message,
@@ -140,18 +167,48 @@ async def chat_stream(
         image_id=request.image_id,
         selected_region=request.selected_region,
     )
-    intent = result.get("intent") or "general"
-    reply = result.get("final_response") or ""
-    actions = result.get("actions") or []
-    thread_id = result["thread_id"]
+    thread_id = state["thread_id"]
 
     async def event_generator():
         yield f"event: status\ndata: {json.dumps({'message': 'Đang lập kế hoạch và nạp context...', 'thread_id': thread_id}, ensure_ascii=False)}\n\n"
-        yield f"event: tool_result\ndata: {json.dumps({'intent': intent, 'actions': actions, 'tool_results': result.get('tool_results')}, ensure_ascii=False)}\n\n"
-        for token in reply:
-            yield f"event: token\ndata: {json.dumps(token, ensure_ascii=False)}\n\n"
-            await asyncio.sleep(0.006)
-        yield f"event: final\ndata: {json.dumps({'thread_id': thread_id, 'intent': intent, 'message': reply, 'actions': actions}, ensure_ascii=False)}\n\n"
+        try:
+            tool_state = run_agent_tool_steps(db, state)
+            intent = tool_state.get("intent") or "general"
+            actions = tool_state.get("actions") or []
+            yield f"event: tool_result\ndata: {json.dumps({'intent': intent, 'actions': actions, 'tool_results': tool_state.get('tool_results')}, ensure_ascii=False)}\n\n"
+
+            yield f"event: status\ndata: {json.dumps({'message': 'Đang sinh câu trả lời...', 'thread_id': thread_id}, ensure_ascii=False)}\n\n"
+            prompt = build_response_prompt(db, tool_state)
+            model = get_agent_model()
+            chunks: list[str] = []
+            for chunk in model.stream(
+                [
+                    ("system", SYSTEM_PROMPT),
+                    ("human", prompt),
+                ]
+            ):
+                token = _stream_content_to_text(getattr(chunk, "content", chunk))
+                if not token:
+                    continue
+                chunks.append(token)
+                yield f"event: token\ndata: {json.dumps(token, ensure_ascii=False)}\n\n"
+
+            reply = "".join(chunks)
+            finalize_agent_response(db=db, state=tool_state, final_response=reply)
+            yield f"event: final\ndata: {json.dumps({'thread_id': thread_id, 'intent': intent, 'message': reply, 'actions': actions}, ensure_ascii=False)}\n\n"
+        except Exception as exc:
+            fallback = (
+                "Agent chưa thể stream câu trả lời lúc này. "
+                f"Lỗi: {exc}"
+            )
+            for token in fallback:
+                yield f"event: token\ndata: {json.dumps(token, ensure_ascii=False)}\n\n"
+            try:
+                state["intent"] = state.get("intent") or "error"
+                finalize_agent_response(db=db, state=state, final_response=fallback)
+            except Exception as save_exc:
+                print(f"[AGENT] Stream fallback save skipped: {save_exc}")
+            yield f"event: final\ndata: {json.dumps({'thread_id': thread_id, 'intent': state.get('intent') or 'error', 'message': fallback, 'actions': []}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

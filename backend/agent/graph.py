@@ -98,6 +98,40 @@ def _strip_visual_data(value: Any) -> Any:
     return value
 
 
+def build_response_prompt(db: Session, state: AgentState) -> str:
+    thread_id = state["thread_id"]
+    recent_messages = load_recent_messages(db, thread_id, limit=10)
+    long_memory = _serialize_store_items(
+        retrieve_long_memory(_long_memory_namespace(state.get("user_id")), limit=5)
+    )
+    state["long_memory"] = long_memory
+    context_payload = {
+        "answer_mode": state.get("answer_mode"),
+        "planner_reason": state.get("planner_reason"),
+        "intent": state.get("intent"),
+        "current_page": state.get("current_page"),
+        "patient_id": state.get("patient_id"),
+        "image_id": state.get("image_id"),
+        "selected_region": state.get("selected_region"),
+        "planned_tools": state.get("planned_tools", []),
+        "validated_tools": state.get("validated_tools", []),
+        "tool_errors": state.get("tool_errors", []),
+        "tool_results": _strip_visual_data(state.get("tool_results", {})),
+        "recent_messages": recent_messages,
+        "long_memory": long_memory,
+    }
+
+    return (
+        f"Tin nháº¯n bÃ¡c sÄ©: {state.get('message')}\n\n"
+        "Dá»¯ liá»‡u tool/context JSON:\n"
+        f"{json.dumps(context_payload, ensure_ascii=False, default=str)}\n\n"
+        "HÃ£y tráº£ lá»i Markdown Ä‘áº¹p, ngáº¯n gá»n, dá»±a trÃªn dá»¯ liá»‡u tool náº¿u cÃ³. "
+        "Náº¿u tool_errors bÃ¡o thiáº¿u patient_id/image_id, hÃ£y há»i láº¡i bÃ¡c sÄ© cáº§n chá»n bá»‡nh nhÃ¢n/áº£nh nÃ o. "
+        "Náº¿u khÃ´ng cÃ³ tool_results vÃ¬ cÃ¢u há»i lÃ  kiáº¿n thá»©c chung, tráº£ lá»i kiáº¿n thá»©c chung. "
+        "KhÃ´ng bá»‹a dá»¯ liá»‡u bá»‡nh nhÃ¢n."
+    )
+
+
 def _make_generate_response(db: Session):
     def _generate_response(state: AgentState) -> AgentState:
         thread_id = state["thread_id"]
@@ -178,6 +212,120 @@ def _build_graph(db: Session):
 
 def get_agent_graph(db: Session):
     return _build_graph(db)
+
+
+def prepare_agent_state(
+    *,
+    db: Session,
+    current_user: dict[str, Any],
+    message: str,
+    thread_id: str | None = None,
+    current_page: str | None = None,
+    patient_id: str | None = None,
+    image_id: int | None = None,
+    selected_region: dict[str, Any] | None = None,
+) -> AgentState:
+    resolved_thread_id = thread_id or str(uuid.uuid4())
+    user_id = _safe_user_id(current_user)
+    patient = resolve_patient(db, patient_id)
+    get_or_create_conversation(
+        db,
+        thread_id=resolved_thread_id,
+        user_id=user_id,
+        patient_id=patient.id if patient else None,
+        image_id=image_id,
+    )
+    save_message(
+        db,
+        thread_id=resolved_thread_id,
+        user_id=user_id,
+        role="user",
+        content=message,
+        metadata={
+            "current_page": current_page,
+            "patient_id": patient_id,
+            "image_id": image_id,
+            "selected_region": selected_region,
+        },
+    )
+
+    return {
+        "thread_id": resolved_thread_id,
+        "user_id": user_id,
+        "role": current_user.get("role"),
+        "current_page": current_page,
+        "patient_id": patient_id,
+        "image_id": image_id,
+        "selected_region": selected_region,
+        "message": message,
+        "actions": [],
+        "tool_results": {},
+    }
+
+
+def run_agent_tool_steps(db: Session, state: AgentState) -> AgentState:
+    state = plan_tools(state)
+    state = validate_tools(state)
+    state = make_execute_tools(db)(state)
+    return state
+
+
+def finalize_agent_response(
+    *,
+    db: Session,
+    state: AgentState,
+    final_response: str,
+) -> AgentState:
+    state["final_response"] = final_response
+    user_id = state.get("user_id")
+    patient_id = state.get("patient_id")
+    image_id = state.get("image_id")
+    patient = resolve_patient(db, patient_id)
+    thread_id = state["thread_id"]
+
+    save_message(
+        db,
+        thread_id=thread_id,
+        user_id=user_id,
+        role="assistant",
+        content=final_response,
+        metadata={"intent": state.get("intent"), "tool_results": state.get("tool_results")},
+    )
+    try:
+        save_audit_log(
+            db,
+            user_id=user_id,
+            patient_id=patient.id if patient else None,
+            image_id=image_id,
+            thread_id=thread_id,
+            action="agent_chat",
+            tool_name=state.get("intent"),
+            metadata={
+                "message": state.get("message"),
+                "current_page": state.get("current_page"),
+                "actions": state.get("actions") or [],
+                "planned_tools": state.get("planned_tools") or [],
+                "validated_tools": state.get("validated_tools") or [],
+                "has_selected_region": bool(state.get("selected_region")),
+                "streamed": True,
+            },
+        )
+    except Exception as exc:
+        print(f"[AGENT] Audit log skipped: {exc}")
+    save_long_memory(
+        _long_memory_namespace(user_id),
+        f"{thread_id}:{uuid.uuid4().hex[:8]}",
+        {
+            "thread_id": thread_id,
+            "patient_id": patient_id,
+            "image_id": image_id,
+            "intent": state.get("intent"),
+            "planner_reason": state.get("planner_reason"),
+            "user_message": (state.get("message") or "")[:1000],
+            "assistant_message": final_response[:1000],
+        },
+    )
+    return state
 
 
 def run_agent(
