@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 class AgentChatRequest(BaseModel):
     message: str
     thread_id: Optional[str] = None
+    current_page: Optional[str] = None
     patient_id: Optional[str] = None
     image_id: Optional[int] = None
     selected_region: Optional[dict[str, Any]] = None
@@ -39,4 +40,3 @@ class AgentMessageResponse(BaseModel):
     message_type: str = "text"
     metadata_json: Optional[dict[str, Any]] = None
     created_at: datetime
-

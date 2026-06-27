@@ -10,7 +10,7 @@ from agent.checkpoint import (
     retrieve_long_memory,
     save_long_memory,
 )
-from agent.intent_router import route_intent
+from agent.executor import make_execute_tools
 from agent.llm import get_agent_model
 from agent.memory import (
     get_or_create_conversation,
@@ -18,13 +18,10 @@ from agent.memory import (
     save_audit_log,
     save_message,
 )
+from agent.planner import plan_tools
 from agent.state import AgentState
-from agent.tools.analysis_tools import get_image_analysis
-from agent.tools.patient_tools import (
-    get_patient_diagnosis_history,
-    get_patient_profile,
-    resolve_patient,
-)
+from agent.tools.patient_tools import resolve_patient
+from agent.validator import validate_tools
 
 
 SYSTEM_PROMPT = """Bạn là NeuroDiagnosis Agent trong hệ thống NeuroDiagnosis AI.
@@ -101,39 +98,6 @@ def _strip_visual_data(value: Any) -> Any:
     return value
 
 
-def _make_load_tool_context(db: Session):
-    def _load_tool_context(state: AgentState) -> AgentState:
-        intent = state.get("intent") or "general"
-        patient_id = state.get("patient_id")
-        image_id = state.get("image_id")
-        tool_results: dict[str, Any] = {}
-
-        patient = resolve_patient(db, patient_id)
-        if patient:
-            state["resolved_patient_id"] = patient.id
-
-        if intent in {"patient_qa", "general"} and patient_id:
-            tool_results["patient_profile"] = get_patient_profile(db, patient_id)
-
-        if intent in {"history_qa", "report_summary"}:
-            tool_results["diagnosis_history"] = get_patient_diagnosis_history(db, patient_id)
-
-        if intent in {"classification_xai", "human_review", "multimodal_image_chat"} or image_id:
-            tool_results["image_analysis"] = get_image_analysis(db, image_id)
-
-        if intent == "quick_mri":
-            tool_results["quick_mri_instruction"] = {
-                "requires_file": True,
-                "requires_patient_id": not bool(patient_id),
-                "message": "Nếu bác sĩ attach MRI, Agent sẽ dùng workflow quick_mri_diagnosis.",
-            }
-
-        state["tool_results"] = tool_results
-        return state
-
-    return _load_tool_context
-
-
 def _make_generate_response(db: Session):
     def _generate_response(state: AgentState) -> AgentState:
         thread_id = state["thread_id"]
@@ -143,10 +107,16 @@ def _make_generate_response(db: Session):
         )
         state["long_memory"] = long_memory
         context_payload = {
+            "answer_mode": state.get("answer_mode"),
+            "planner_reason": state.get("planner_reason"),
             "intent": state.get("intent"),
+            "current_page": state.get("current_page"),
             "patient_id": state.get("patient_id"),
             "image_id": state.get("image_id"),
             "selected_region": state.get("selected_region"),
+            "planned_tools": state.get("planned_tools", []),
+            "validated_tools": state.get("validated_tools", []),
+            "tool_errors": state.get("tool_errors", []),
             "tool_results": _strip_visual_data(state.get("tool_results", {})),
             "recent_messages": recent_messages,
             "long_memory": long_memory,
@@ -156,7 +126,10 @@ def _make_generate_response(db: Session):
             f"Tin nhắn bác sĩ: {state.get('message')}\n\n"
             "Dữ liệu tool/context JSON:\n"
             f"{json.dumps(context_payload, ensure_ascii=False, default=str)}\n\n"
-            "Hãy trả lời dựa trên dữ liệu tool. Nếu thiếu dữ liệu, nói rõ thiếu dữ liệu nào."
+            "Hãy trả lời Markdown đẹp, ngắn gọn, dựa trên dữ liệu tool nếu có. "
+            "Nếu tool_errors báo thiếu patient_id/image_id, hãy hỏi lại bác sĩ cần chọn bệnh nhân/ảnh nào. "
+            "Nếu không có tool_results vì câu hỏi là kiến thức chung, trả lời kiến thức chung. "
+            "Không bịa dữ liệu bệnh nhân."
         )
 
         try:
@@ -188,12 +161,14 @@ def _build_graph(db: Session):
         raise RuntimeError("Missing dependency langgraph. Rebuild/install backend requirements.") from exc
 
     graph = StateGraph(AgentState)
-    graph.add_node("route_intent", route_intent)
-    graph.add_node("load_tool_context", _make_load_tool_context(db))
+    graph.add_node("plan_tools", plan_tools)
+    graph.add_node("validate_tools", validate_tools)
+    graph.add_node("execute_tools", make_execute_tools(db))
     graph.add_node("generate_response", _make_generate_response(db))
-    graph.add_edge(START, "route_intent")
-    graph.add_edge("route_intent", "load_tool_context")
-    graph.add_edge("load_tool_context", "generate_response")
+    graph.add_edge(START, "plan_tools")
+    graph.add_edge("plan_tools", "validate_tools")
+    graph.add_edge("validate_tools", "execute_tools")
+    graph.add_edge("execute_tools", "generate_response")
     graph.add_edge("generate_response", END)
 
     checkpointer = get_postgres_checkpointer()
@@ -211,6 +186,7 @@ def run_agent(
     current_user: dict[str, Any],
     message: str,
     thread_id: str | None = None,
+    current_page: str | None = None,
     patient_id: str | None = None,
     image_id: int | None = None,
     selected_region: dict[str, Any] | None = None,
@@ -231,13 +207,19 @@ def run_agent(
         user_id=user_id,
         role="user",
         content=message,
-        metadata={"patient_id": patient_id, "image_id": image_id, "selected_region": selected_region},
+        metadata={
+            "current_page": current_page,
+            "patient_id": patient_id,
+            "image_id": image_id,
+            "selected_region": selected_region,
+        },
     )
 
     initial_state: AgentState = {
         "thread_id": resolved_thread_id,
         "user_id": user_id,
         "role": current_user.get("role"),
+        "current_page": current_page,
         "patient_id": patient_id,
         "image_id": image_id,
         "selected_region": selected_region,
@@ -269,7 +251,10 @@ def run_agent(
             tool_name=result.get("intent"),
             metadata={
                 "message": message,
+                "current_page": current_page,
                 "actions": result.get("actions") or [],
+                "planned_tools": result.get("planned_tools") or [],
+                "validated_tools": result.get("validated_tools") or [],
                 "has_selected_region": bool(selected_region),
             },
         )
@@ -283,6 +268,7 @@ def run_agent(
             "patient_id": patient_id,
             "image_id": image_id,
             "intent": result.get("intent"),
+            "planner_reason": result.get("planner_reason"),
             "user_message": message[:1000],
             "assistant_message": (result.get("final_response") or "")[:1000],
         },

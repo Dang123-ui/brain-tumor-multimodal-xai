@@ -225,6 +225,18 @@ function getRoutePatientId(pathname: string, searchParams: URLSearchParams) {
   return undefined;
 }
 
+function getCurrentPage(pathname: string, searchParams: URLSearchParams) {
+  const query = searchParams.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
+
+function getRouteImageId(searchParams: URLSearchParams) {
+  const raw = searchParams.get("imageId");
+  if (!raw) return undefined;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 function getErrorDetail(error: unknown) {
   if (typeof error === "object" && error !== null) {
     const maybeAxios = error as {
@@ -282,6 +294,14 @@ export function AgentFloatingWidget() {
     [pathname, searchParams],
   );
   const activePatientId = routePatientId || selectedPatientId;
+  const currentPage = useMemo(
+    () => getCurrentPage(pathname, searchParams),
+    [pathname, searchParams],
+  );
+  const activeImageId = useMemo(
+    () => getRouteImageId(searchParams),
+    [searchParams],
+  );
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
@@ -490,7 +510,9 @@ export function AgentFloatingWidget() {
       const response = await agentApi.chat({
         message: content,
         thread_id: activeThreadId,
+        current_page: currentPage,
         patient_id: activePatientId,
+        image_id: activeImageId,
       });
       setActiveThreadId(response.data.thread_id);
       append(

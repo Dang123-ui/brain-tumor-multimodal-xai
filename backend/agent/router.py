@@ -109,6 +109,7 @@ def chat(
         current_user=current_user,
         message=request.message,
         thread_id=request.thread_id,
+        current_page=request.current_page,
         patient_id=request.patient_id,
         image_id=request.image_id,
         selected_region=request.selected_region,
@@ -133,6 +134,7 @@ async def chat_stream(
         current_user=current_user,
         message=request.message,
         thread_id=request.thread_id,
+        current_page=request.current_page,
         patient_id=request.patient_id,
         image_id=request.image_id,
         selected_region=request.selected_region,
@@ -143,7 +145,7 @@ async def chat_stream(
     thread_id = result["thread_id"]
 
     async def event_generator():
-        yield f"event: tool_start\ndata: {json.dumps({'tool': 'route_intent', 'thread_id': thread_id})}\n\n"
+        yield f"event: tool_start\ndata: {json.dumps({'tool': 'planner_validate_execute', 'thread_id': thread_id})}\n\n"
         yield f"event: tool_result\ndata: {json.dumps({'intent': intent, 'actions': actions, 'tool_results': result.get('tool_results')}, ensure_ascii=False)}\n\n"
         for token in reply.split(" "):
             yield f"event: token\ndata: {json.dumps(token + ' ', ensure_ascii=False)}\n\n"

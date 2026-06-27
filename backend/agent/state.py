@@ -9,8 +9,14 @@ class AgentState(TypedDict, total=False):
     resolved_patient_id: Optional[int]
     image_id: Optional[int]
     selected_region: Optional[dict[str, Any]]
+    current_page: Optional[str]
     message: str
     intent: str
+    answer_mode: str
+    planner_reason: Optional[str]
+    planned_tools: list[dict[str, Any]]
+    validated_tools: list[dict[str, Any]]
+    tool_errors: list[dict[str, Any]]
     actions: list[dict[str, Any]]
     tool_results: dict[str, Any]
     long_memory: list[dict[str, Any]]

@@ -55,6 +55,7 @@ export const agentApi = {
   chat: async (payload: {
     message: string;
     thread_id?: string;
+    current_page?: string;
     patient_id?: string;
     image_id?: number;
     selected_region?: Record<string, unknown>;

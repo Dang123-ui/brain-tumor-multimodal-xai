@@ -40,4 +40,3 @@ def route_intent(state: AgentState) -> AgentState:
 
     state["intent"] = intent
     return state
-
