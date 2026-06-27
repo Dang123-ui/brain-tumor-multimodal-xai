@@ -51,16 +51,132 @@ export type QuickMriResponse = {
   summary: string;
 };
 
+export type AgentChatPayload = {
+  message: string;
+  thread_id?: string;
+  current_page?: string;
+  patient_id?: string;
+  image_id?: number;
+  selected_region?: Record<string, unknown>;
+};
+
+export type AgentStreamFinal = {
+  thread_id: string;
+  intent: string;
+  message: string;
+  actions: Array<Record<string, unknown>>;
+};
+
+export type AgentStreamToolResult = {
+  intent?: string;
+  actions?: Array<Record<string, unknown>>;
+  tool_results?: Record<string, unknown>;
+};
+
+type AgentStreamHandlers = {
+  onStatus?: (data: Record<string, unknown>) => void;
+  onToolResult?: (data: AgentStreamToolResult) => void;
+  onToken?: (token: string) => void;
+  onFinal?: (data: AgentStreamFinal) => void;
+};
+
+function apiBaseUrl() {
+  return String(api.defaults.baseURL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
+}
+
+function authHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const token = localStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function dispatchSseEvent(
+  rawEvent: string,
+  handlers: AgentStreamHandlers,
+) {
+  const lines = rawEvent.split(/\r?\n/);
+  const event = lines
+    .find((line) => line.startsWith("event:"))
+    ?.slice("event:".length)
+    .trim();
+  const dataText = lines
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice("data:".length).trimStart())
+    .join("\n");
+
+  if (!event || !dataText) return;
+
+  let data: unknown;
+  try {
+    data = JSON.parse(dataText);
+  } catch {
+    data = dataText;
+  }
+
+  if (event === "status" && typeof data === "object" && data !== null) {
+    handlers.onStatus?.(data as Record<string, unknown>);
+  }
+  if (event === "tool_result" && typeof data === "object" && data !== null) {
+    handlers.onToolResult?.(data as AgentStreamToolResult);
+  }
+  if (event === "token") {
+    handlers.onToken?.(typeof data === "string" ? data : String(data ?? ""));
+  }
+  if (event === "final" && typeof data === "object" && data !== null) {
+    handlers.onFinal?.(data as AgentStreamFinal);
+  }
+}
+
 export const agentApi = {
-  chat: async (payload: {
-    message: string;
-    thread_id?: string;
-    current_page?: string;
-    patient_id?: string;
-    image_id?: number;
-    selected_region?: Record<string, unknown>;
-  }) => {
+  chat: async (payload: AgentChatPayload) => {
     return api.post<AgentChatResponse>("/agent/chat", payload);
+  },
+
+  chatStream: async (
+    payload: AgentChatPayload,
+    handlers: AgentStreamHandlers,
+  ) => {
+    const response = await fetch(`${apiBaseUrl()}/agent/chat/stream`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders(),
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      let detail = response.statusText || "Agent stream failed";
+      try {
+        const errorBody = await response.json();
+        detail = errorBody.detail || detail;
+      } catch {
+        // Keep HTTP status text when the body is not JSON.
+      }
+      throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    }
+
+    if (!response.body) {
+      throw new Error("Trình duyệt không hỗ trợ stream response.");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split(/\n\n/);
+      buffer = events.pop() || "";
+      events.forEach((event) => dispatchSseEvent(event, handlers));
+    }
+
+    buffer += decoder.decode();
+    if (buffer.trim()) {
+      dispatchSseEvent(buffer, handlers);
+    }
   },
 
   searchPatients: async (query: string) => {

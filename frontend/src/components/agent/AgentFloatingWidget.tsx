@@ -329,6 +329,17 @@ export function AgentFloatingWidget() {
     setMessages((current) => [...current, message]);
   };
 
+  const updateMessage = (
+    messageId: string,
+    updater: (message: ChatMessage) => ChatMessage,
+  ) => {
+    setMessages((current) =>
+      current.map((message) =>
+        message.id === messageId ? updater(message) : message,
+      ),
+    );
+  };
+
   const copyMessage = async (message: ChatMessage) => {
     try {
       await navigator.clipboard.writeText(message.content);
@@ -505,21 +516,47 @@ export function AgentFloatingWidget() {
     }
 
     setBusy(true);
+    const startedAt = performance.now();
+    const assistantMessage = newMessage("assistant", "");
+    append(assistantMessage);
     try {
-      const startedAt = performance.now();
-      const response = await agentApi.chat({
-        message: content,
-        thread_id: activeThreadId,
-        current_page: currentPage,
-        patient_id: activePatientId,
-        image_id: activeImageId,
-      });
-      setActiveThreadId(response.data.thread_id);
-      append(
-        newMessage("assistant", response.data.message, {
-          responseMs: performance.now() - startedAt,
-          visuals: collectVisualsFromToolResults(response.data.tool_results),
-        }),
+      await agentApi.chatStream(
+        {
+          message: content,
+          thread_id: activeThreadId,
+          current_page: currentPage,
+          patient_id: activePatientId,
+          image_id: activeImageId,
+        },
+        {
+          onStatus: (data) => {
+            const threadId =
+              typeof data.thread_id === "string" ? data.thread_id : undefined;
+            if (threadId) {
+              setActiveThreadId(threadId);
+            }
+          },
+          onToolResult: (data) => {
+            updateMessage(assistantMessage.id, (message) => ({
+              ...message,
+              visuals: collectVisualsFromToolResults(data.tool_results),
+            }));
+          },
+          onToken: (token) => {
+            updateMessage(assistantMessage.id, (message) => ({
+              ...message,
+              content: `${message.content}${token}`,
+            }));
+          },
+          onFinal: (data) => {
+            setActiveThreadId(data.thread_id);
+            updateMessage(assistantMessage.id, (message) => ({
+              ...message,
+              content: data.message || message.content,
+              responseMs: performance.now() - startedAt,
+            }));
+          },
+        },
       );
     } catch (error: unknown) {
       const { detail, message } = getErrorDetail(error);

@@ -1,5 +1,6 @@
 ﻿import json
 import os
+import asyncio
 import uuid
 from typing import Any, Optional
 
@@ -145,10 +146,11 @@ async def chat_stream(
     thread_id = result["thread_id"]
 
     async def event_generator():
-        yield f"event: tool_start\ndata: {json.dumps({'tool': 'planner_validate_execute', 'thread_id': thread_id})}\n\n"
+        yield f"event: status\ndata: {json.dumps({'message': 'Đang lập kế hoạch và nạp context...', 'thread_id': thread_id}, ensure_ascii=False)}\n\n"
         yield f"event: tool_result\ndata: {json.dumps({'intent': intent, 'actions': actions, 'tool_results': result.get('tool_results')}, ensure_ascii=False)}\n\n"
-        for token in reply.split(" "):
-            yield f"event: token\ndata: {json.dumps(token + ' ', ensure_ascii=False)}\n\n"
+        for token in reply:
+            yield f"event: token\ndata: {json.dumps(token, ensure_ascii=False)}\n\n"
+            await asyncio.sleep(0.006)
         yield f"event: final\ndata: {json.dumps({'thread_id': thread_id, 'intent': intent, 'message': reply, 'actions': actions}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
