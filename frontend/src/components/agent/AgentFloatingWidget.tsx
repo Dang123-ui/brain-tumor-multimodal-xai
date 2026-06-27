@@ -55,6 +55,13 @@ type ChatVisual = {
   imageId?: number;
 };
 
+type QuickMriVisualPayload = {
+  image_id: number;
+  bbox_overlay_data_url?: string | null;
+  mask_overlay_data_url?: string | null;
+  contour_overlay_data_url?: string | null;
+};
+
 function newMessage(
   role: AgentMessageRole,
   content: string,
@@ -74,6 +81,37 @@ function isVisual(value: unknown): value is ChatVisual {
   if (typeof value !== "object" || value === null) return false;
   const item = value as { label?: unknown; url?: unknown };
   return typeof item.label === "string" && typeof item.url === "string";
+}
+
+function buildQuickMriVisuals(payload?: QuickMriVisualPayload): ChatVisual[] {
+  if (!payload) return [];
+  const visuals: ChatVisual[] = [];
+
+  if (payload.bbox_overlay_data_url) {
+    visuals.push({
+      label: `ID ${payload.image_id} - Detection (BBox)`,
+      url: payload.bbox_overlay_data_url,
+      imageId: payload.image_id,
+    });
+  }
+
+  if (payload.mask_overlay_data_url) {
+    visuals.push({
+      label: `ID ${payload.image_id} - Segmentation (Mask)`,
+      url: payload.mask_overlay_data_url,
+      imageId: payload.image_id,
+    });
+  }
+
+  if (payload.contour_overlay_data_url) {
+    visuals.push({
+      label: `ID ${payload.image_id} - Tumor Contour`,
+      url: payload.contour_overlay_data_url,
+      imageId: payload.image_id,
+    });
+  }
+
+  return visuals;
 }
 
 function shouldPreferLatestVisuals(message?: string, currentPage?: string) {
@@ -414,6 +452,7 @@ export function AgentFloatingWidget() {
   ]);
   const [busy, setBusy] = useState(false);
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [pendingQuickMriFile, setPendingQuickMriFile] = useState<File | null>(null);
   const [patientQuery, setPatientQuery] = useState("");
   const [patientResults, setPatientResults] = useState<AgentPatient[]>([]);
   const [showPatientSearch, setShowPatientSearch] = useState(false);
@@ -571,6 +610,7 @@ export function AgentFloatingWidget() {
 
   const runQuickMri = async (file: File, patientId?: string) => {
     if (!patientId?.trim()) {
+      setPendingQuickMriFile(file);
       setShowPatientSearch(true);
       append(
         newMessage(
@@ -587,6 +627,7 @@ export function AgentFloatingWidget() {
       const quick = await agentApi.quickMri({ patientId, file });
       const { task_id, image_id, patient } = quick.data;
       const routePatientId = patient.patient_external_id || String(patient.id);
+      setPendingQuickMriFile(null);
 
       append(newMessage("assistant", quick.data.summary));
       await apiService.inference.waitForTask(
@@ -611,7 +652,17 @@ export function AgentFloatingWidget() {
       );
 
       const summary = await agentApi.quickMriSummary(image_id);
-      append(newMessage("assistant", summary.data.summary));
+      const imageResult = await apiService.analysis.getImageResult(image_id);
+      append(
+        newMessage("assistant", summary.data.summary, {
+          visuals: buildQuickMriVisuals({
+            image_id,
+            bbox_overlay_data_url: imageResult.data.bbox_overlay_data_url,
+            mask_overlay_data_url: imageResult.data.mask_overlay_data_url,
+            contour_overlay_data_url: imageResult.data.contour_overlay_data_url,
+          }),
+        }),
+      );
       append(newMessage("tool", "Đang mở trang kết quả chi tiết..."));
       router.push(`/results/${encodeURIComponent(routePatientId)}?imageId=${image_id}`);
     } catch (error: unknown) {
@@ -621,6 +672,7 @@ export function AgentFloatingWidget() {
           ? (detail as { type?: string; reason?: string })
           : undefined;
       if (status === 409 && interruptDetail?.type === "select_patient") {
+        setPendingQuickMriFile(file);
         setShowPatientSearch(true);
         append(newMessage("assistant", interruptDetail.reason || "Cần chọn bệnh nhân trước khi chạy MRI pipeline."));
       } else {
@@ -725,6 +777,15 @@ export function AgentFloatingWidget() {
     setSelectedPatientId(code);
     setPatientQuery(code);
     setShowPatientSearch(false);
+    if (pendingQuickMriFile) {
+      append(
+        newMessage(
+          "assistant",
+          "Da nhan ma benh nhan. Toi tiep tuc chay MRI pipeline tu file vua tai len.",
+        ),
+      );
+      void runQuickMri(pendingQuickMriFile, code);
+    }
     append(newMessage("tool", `Đã chọn bệnh nhân ${patient.name || "không tên"} (${code}).`));
   };
 
