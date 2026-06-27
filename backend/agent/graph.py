@@ -160,6 +160,104 @@ def build_response_prompt(db: Session, state: AgentState) -> str:
     )
 
 
+def _is_history_analysis_request(state: AgentState) -> bool:
+    message_text = (state.get("message") or "").lower()
+    current_page = str(state.get("current_page") or "")
+    history_hints = [
+        "lich su",
+        "lịch sử",
+        "timeline",
+        "toan bo",
+        "toàn bộ",
+        "tat ca",
+        "tất cả",
+        "dien tien",
+        "diễn tiến",
+        "so sanh",
+        "so sánh",
+        "history",
+        "phan tich lich su",
+        "phân tích lịch sử",
+    ]
+    return current_page.startswith("/history/") or any(
+        hint in message_text for hint in history_hints
+    )
+
+
+def build_response_prompt(db: Session, state: AgentState) -> str:
+    thread_id = state["thread_id"]
+    recent_messages = load_recent_messages(db, thread_id, limit=10)
+    long_memory = _serialize_store_items(
+        retrieve_long_memory(_long_memory_namespace(state.get("user_id")), limit=5)
+    )
+    state["long_memory"] = long_memory
+    context_payload = {
+        "answer_mode": state.get("answer_mode"),
+        "planner_reason": state.get("planner_reason"),
+        "intent": state.get("intent"),
+        "current_page": state.get("current_page"),
+        "patient_id": state.get("patient_id"),
+        "image_id": state.get("image_id"),
+        "selected_region": state.get("selected_region"),
+        "planned_tools": state.get("planned_tools", []),
+        "validated_tools": state.get("validated_tools", []),
+        "tool_errors": state.get("tool_errors", []),
+        "tool_results": _strip_visual_data(state.get("tool_results", {})),
+        "recent_messages": recent_messages,
+        "long_memory": long_memory,
+    }
+
+    base_instruction = (
+        "Hay tra loi bang Markdown hop le, ro y, dung du lieu tool neu co. "
+        "Khong bia du lieu benh nhan. "
+        "Neu tool_errors bao thieu patient_id/image_id thi hay hoi lai bac si can chon benh nhan hoac anh nao. "
+        "Neu cau hoi la kien thuc chung va khong co tool_results thi tra loi kien thuc chung."
+    )
+
+    if _is_history_analysis_request(state):
+        history_instruction = (
+            "\n\nBan dang o che do phan tich lich su chan doan hinh anh chuyen sau.\n"
+            "Hay phan tich dua tren toan bo du lieu lich su co trong tool_results, khong chi 2 lan gan nhat.\n"
+            "Bat buoc dung cac heading sau:\n"
+            "## Tong quan\n"
+            "## Timeline chan doan\n"
+            "## Phan tich xu huong AI Label\n"
+            "## Phan tich confidence\n"
+            "## Phan tich risk score va risk group\n"
+            "## Doi chieu AI - bac si\n"
+            "## Phan tich XAI\n"
+            "## Chat luong du lieu\n"
+            "## Diem bat thuong va uu tien review\n"
+            "## Tong hop dien tien\n"
+            "## Ket luan ho tro bac si\n\n"
+            "Yeu cau noi dung:\n"
+            "- Neu co tool_results.items thi phai trinh bay toan bo cac moc chan doan theo thu tu thoi gian tu cu den moi.\n"
+            "- Moi moc can neu ro: image_id, modality, AI Label, confidence, no_tumor_detected, risk score, risk group, expert label, final label, review status, XAI/heatmap.\n"
+            "- Sau moi moc can co nhan xet tai thoi diem do.\n"
+            "- Can phan tich xu huong AI Label, confidence, risk score va risk group tren toan timeline.\n"
+            "- Neu co latest va previous thi tinh delta risk score.\n"
+            "- Neu no_tumor_detected = true thi khong duoc dien giai risk score nhu mot ket qua tien luong hop le; phai danh dau du lieu bat thuong neu van co risk score.\n"
+            "- Luon phan biet AI Label, Expert Label, Final Label va Review Status.\n"
+            "- Neu thieu field nao thi ghi Chua co du lieu.\n"
+            "- Neu can so sanh nhanh, co the dung bang Markdown hop le, nhung khong duoc bien toan bo cau tra loi thanh mot bang ngan gon.\n"
+            "- Khong dua ra chan doan cuoi cung thay cho bac si.\n"
+            "- Khong ket thuc bang cau hoi hoi lai; hay dua ra ket luan ho tro bac si ro rang.\n"
+        )
+        return (
+            f"Tin nhan bac si: {state.get('message')}\n\n"
+            "Du lieu tool/context JSON:\n"
+            f"{json.dumps(context_payload, ensure_ascii=False, default=str)}\n\n"
+            f"{base_instruction}{history_instruction}"
+        )
+
+    return (
+        f"Tin nhan bac si: {state.get('message')}\n\n"
+        "Du lieu tool/context JSON:\n"
+        f"{json.dumps(context_payload, ensure_ascii=False, default=str)}\n\n"
+        f"{base_instruction}"
+    )
+
+
 def _make_generate_response(db: Session):
     def _generate_response(state: AgentState) -> AgentState:
         thread_id = state["thread_id"]
@@ -216,6 +314,32 @@ def _make_generate_response(db: Session):
     return _generate_response
 
 
+def _make_generate_response_v2(db: Session):
+    def _generate_response(state: AgentState) -> AgentState:
+        prompt = build_response_prompt(db, state)
+
+        try:
+            model = get_agent_model()
+            response = model.invoke(
+                [
+                    ("system", SYSTEM_PROMPT),
+                    ("human", prompt),
+                ]
+            )
+            content = _content_to_text(getattr(response, "content", response))
+        except Exception as exc:
+            content = (
+                "Agent LLM chua san sang. "
+                f"Loi cau hinh hoac dependency: {exc}. "
+                "Tuy nhien tool context da duoc nap, hay kiem tra GOOGLE_API_KEY/GEMINI_API_KEY va backend requirements."
+            )
+
+        state["final_response"] = content
+        return state
+
+    return _generate_response
+
+
 def _build_graph(db: Session):
     try:
         from langgraph.graph import END, START, StateGraph
@@ -226,7 +350,7 @@ def _build_graph(db: Session):
     graph.add_node("plan_tools", plan_tools)
     graph.add_node("validate_tools", validate_tools)
     graph.add_node("execute_tools", make_execute_tools(db))
-    graph.add_node("generate_response", _make_generate_response(db))
+    graph.add_node("generate_response", _make_generate_response_v2(db))
     graph.add_edge(START, "plan_tools")
     graph.add_edge("plan_tools", "validate_tools")
     graph.add_edge("validate_tools", "execute_tools")
