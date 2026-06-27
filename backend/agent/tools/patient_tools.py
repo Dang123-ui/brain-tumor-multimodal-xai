@@ -237,8 +237,11 @@ def get_patient_diagnosis_history(db: Session, patient_id: Optional[str]) -> dic
         .all()
     )
 
+    items = [serialize_analysis_with_visuals(db, result) for result in results]
+
     return {
         "found": True,
         "patient": serialize_patient(patient),
-        "items": [serialize_analysis_with_visuals(db, result) for result in results],
+        "latest_item": items[0] if items else None,
+        "items": items,
     }

@@ -80,6 +80,20 @@ function collectVisualsFromToolResults(toolResults?: Record<string, unknown>) {
   const visuals: ChatVisual[] = [];
   const seen = new Set<string>();
 
+  const collectFromVisualArray = (items: unknown, imageId?: number) => {
+    if (!Array.isArray(items)) return false;
+    let added = false;
+    items.filter(isVisual).forEach((visual) => {
+      const key = `${imageId || ""}:${visual.label}:${visual.url.slice(0, 80)}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        visuals.push({ ...visual, imageId });
+        added = true;
+      }
+    });
+    return added;
+  };
+
   const visit = (value: unknown, imageId?: number) => {
     if (!value) return;
     if (Array.isArray(value)) {
@@ -91,18 +105,32 @@ function collectVisualsFromToolResults(toolResults?: Record<string, unknown>) {
     const resolvedImageId =
       typeof record.image_id === "number" ? record.image_id : imageId;
 
-    if (Array.isArray(record.visuals)) {
-      record.visuals.filter(isVisual).forEach((visual) => {
-        const key = `${resolvedImageId || ""}:${visual.label}:${visual.url.slice(0, 80)}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          visuals.push({ ...visual, imageId: resolvedImageId });
-        }
-      });
+    const prioritizedSources = [
+      record.latest_analysis,
+      record.latest_item,
+    ];
+    for (const source of prioritizedSources) {
+      if (
+        source &&
+        typeof source === "object" &&
+        collectFromVisualArray(
+          (source as Record<string, unknown>).visuals,
+          typeof (source as Record<string, unknown>).image_id === "number"
+            ? ((source as Record<string, unknown>).image_id as number)
+            : resolvedImageId,
+        )
+      ) {
+        return;
+      }
+    }
+
+    if (collectFromVisualArray(record.visuals, resolvedImageId)) {
+      return;
     }
 
     Object.entries(record).forEach(([key, item]) => {
       if (key === "visuals") return;
+      if (key === "latest_analysis" || key === "latest_item") return;
       visit(item, resolvedImageId);
     });
   };
