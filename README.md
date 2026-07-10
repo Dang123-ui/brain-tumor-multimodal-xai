@@ -1,92 +1,244 @@
-# NeuroDiagnosis AI Platform
+# Brain Tumor Multimodal XAI
 
-A comprehensive, multi-modal AI-assisted oncology diagnostic platform designed for neuro-imaging analysis. This repository contains both the FastAPI backend pipeline for AI model inferences and the Next.js frontend dashboard.
+An end-to-end clinical decision support system for brain tumor analysis that combines:
 
-## 🚀 Getting Started
+- MRI diagnosis with detection, segmentation, and classification
+- multimodal prognosis from MRI, WSI, RNA-seq, and clinical data
+- explainable AI for both visual and genomic evidence
+- a production-style web platform for asynchronous AI inference and reporting
 
-These instructions will get you a copy of the project up and running on your local machine for development and testing purposes.
+This repository is built from the student research project:
 
-### Prerequisites
+_Development of a Multimodal Deep Learning Model with XAI for Brain Tumor Diagnosis and Prognosis_
 
-You need to have the following installed on your system:
-- [Node.js](https://nodejs.org/) (v18.x or newer) and npm
-- [Python](https://www.python.org/) 3.10+
-- [Docker](https://www.docker.com/) & Docker Compose (for running backend infrastructure like Redis and Celery easily)
+## Highlights
 
-### 1. Running the Frontend (Web Dashboard)
+- MRI pipeline with **YOLOv11 + DynUNet + DenseNet169**
+- Multimodal prognosis with **gated attention fusion + CoxPH risk modeling**
+- XAI stack with **ODAM**, **Seg-Eigen-CAM**, **Finer-CAM**, and **Grad-CAM family**
+- Web CDSS architecture using **Next.js**, **FastAPI**, **Celery**, **Redis**, **PostgreSQL**, and object storage
+- Quantitative evaluation summarized from the full thesis report
 
-The frontend is built with Next.js 14, React, and Tailwind CSS. It comes pre-configured to run with mock data out-of-the-box, meaning you can test the UI without needing the backend or AI models running.
+![Key experimental highlights](assets/readme/results/metrics_highlights.svg)
 
-1. **Navigate to the frontend directory:**
-   ```bash
-   cd frontend
-   ```
+## Project Scope
 
-2. **Install JavaScript dependencies:**
-   ```bash
-   npm install
-   ```
+The system is organized around three core modules described in the project report:
 
-3. **Environment Setup:**
-   Ensure there is a `.env.local` file in the `frontend` folder with the following configuration:
-   ```env
-   NEXT_PUBLIC_API_URL=http://localhost:8000
-   NEXT_PUBLIC_USE_MOCK_DATA=true
-   ```
-   *(Set `NEXT_PUBLIC_USE_MOCK_DATA` to `false` when the real backend is operational).*
+1. **MRI diagnosis module**
+   - tumor detection
+   - tumor segmentation
+   - tumor classification
+   - per-stage explainability
 
-4. **Start the development server:**
-   ```bash
-   npm run dev
-   ```
+2. **Multimodal prognosis module**
+   - MRI, WSI, RNA-seq, and clinical feature fusion
+   - Cox proportional hazards risk estimation
+   - visual and genomic explainability
 
-5. **Access the Application:**
-   Open your browser and navigate to [http://localhost:3000](http://localhost:3000).
-   - **Default Login:** Use username `admin` and any password (e.g. `123456`) to access the dashboard with researcher privileges.
+3. **Clinical web platform**
+   - patient management
+   - asynchronous inference orchestration
+   - result review, XAI visualization, and reporting
 
-### 2. Running the Backend (API & AI Inference Engine)
+## System Architecture
 
-The backend is built with FastAPI, integrating Celery for asynchronous AI processing and Redis as the message broker.
+### 3-layer MRI analysis and XAI architecture
 
-1. **Start infrastructure via Docker Compose:**
-   Navigate to the root directory of the project and run:
-   ```bash
-   docker-compose up --build
-   ```
-   *This command builds the Python backend container, starts Redis, and initializes Celery workers.*
+This figure is adapted from the full report and shows the application layer, AI inference layer, and XAI/storage layer used by the MRI workflow.
 
-2. **Access the API Documentation:**
-   Once running successfully, the interactive Swagger UI documentation for all endpoints is available at [http://localhost:8000/docs](http://localhost:8000/docs).
+![3-layer MRI and XAI architecture](assets/readme/architecture_3layer_mri_xai.png)
 
-## 🛠 Tech Stack
+### MRI workflow with XAI, RAG, and report generation
 
-- **Frontend:** Next.js 14 (App Router), React, TypeScript, Tailwind CSS v4, Recharts, Lucide Icons.
-- **Backend:** Python 3.10, FastAPI, Celery, Redis, Pydantic v2.
-- **AI/ML Integration Prepared For:** PyTorch, YOLOv5, U-Net, DenseNet. Features endpoints for Multi-modal inputs (MRI + RNA-seq + Clinical Data like KI-67 index).
+The MRI branch starts from raw input, runs detection, segmentation, and classification, then stores XAI artifacts and supports language-based explanation.
 
-## 📄 Architecture Overview
+![MRI pipeline with XAI and RAG](assets/readme/mri_pipeline_xai_rag_flow.png)
 
-- **`/frontend`**: The unified dashboard for Patient Management, Uploading multi-modal diagnostic data, and viewing detailed AI Clinical Reports with explainable AI (Grad-CAM overlays).
-- **`/backend`**: High-performance REST APIs grouped into:
-  - `auth`: JWT-based Access Control.
-  - `multimodal`: Endpoints to handle and validate DICOM, WSI, and RNA expressions.
-  - `inference`: Asynchronous task delegation to Celery for heavy image processing tasks.
-  - `analysis`: Synthesis of tumor classification score and survival index (C-index based).
+### Multimodal prognosis architecture
 
+The prognosis branch fuses MRI, WSI, RNA, and clinical embeddings using attention-based feature fusion before CoxPH risk prediction.
 
+![Multimodal fusion architecture](assets/readme/multimodal_fusion_architecture.png)
 
+## Explainable AI Design
 
+The project uses different XAI mechanisms for different prediction tasks instead of forcing one heatmap method onto every branch.
 
-  @'
-from ai_core.pipeline import TumorAnalysisPipeline
-import os
+### Detection XAI: ODAM
 
-weights_dir = os.path.join(os.getcwd(), "ai_core", "weights")
-pipeline = TumorAnalysisPipeline(weights_dir=weights_dir, device="cpu")
+![ODAM workflow](assets/readme/xai_odam_diagram.png)
 
-result = pipeline.run_inference(
-    image_source=os.path.join(os.getcwd(), "test_mri.dcm"),
-    output_dir=os.path.join(os.getcwd(), "test_output_manual")
-)
-print(result)
-'@ | python -
+### Segmentation XAI: Seg-Eigen-CAM
+
+![Seg-Eigen-CAM workflow](assets/readme/xai_seg_eigen_cam_diagram.png)
+
+### Classification XAI: Finer-CAM
+
+![Finer-CAM workflow](assets/readme/xai_finer_cam_diagram.png)
+
+## Experimental Results
+
+The following summary is derived from the full report and the packaged experiment outputs included in this repository.
+
+### Technical objectives vs achieved results
+
+![Technical targets vs achieved metrics](assets/readme/results/objectives_vs_results.svg)
+
+Key MRI diagnosis metrics reported in the thesis:
+
+- **Detection**
+  - Precision: **95.25%**
+  - Recall: **86.20%**
+  - F1-score: **90.50%**
+  - mAP@50: **85.39%**
+
+- **Segmentation**
+  - Dice: **92.77%**
+  - IoU: **87.03%**
+  - Sensitivity: **92.77%**
+  - Specificity: **96.83%**
+
+- **Classification**
+  - Accuracy: **97.55%**
+  - Macro-F1: **97.54%**
+  - ROC-AUC: **99.45%**
+  - Inference time: **0.029 s**
+
+### XAI quantitative summary
+
+![XAI quantitative summary](assets/readme/results/xai_quantitative_summary.svg)
+
+Representative XAI findings highlighted in the report:
+
+- **ODAM** explains the detection branch well
+  - Pointing game on bbox: **98.98%**
+  - Confidence drop@20 when masking important region: **82.55%**
+
+- **Seg-Eigen-CAM** explains the segmentation branch well
+  - Pointing to GT mask: **99.08%**
+
+- **Finer-CAM** captures class-discriminative evidence
+  - Drop@20: **23.77%**
+  - Relative drop@20: **41.50%**
+
+### Example outputs
+
+MRI detection result:
+
+![MRI detection example](assets/readme/examples/mri_detection_example.png)
+
+MRI segmentation result:
+
+![MRI segmentation example](assets/readme/examples/mri_segmentation_example.png)
+
+Classification XAI example:
+
+![Classification XAI example](assets/readme/examples/mri_classification_xai_example.png)
+
+Multimodal prognosis XAI example:
+
+![Multimodal prognosis XAI example](assets/readme/examples/multimodal_risk_xai_example.png)
+
+## Repository Structure
+
+```text
+.
+├── backend/        FastAPI APIs, AI pipeline integration, async task orchestration
+├── frontend/       Next.js clinical dashboard
+├── assets/readme/  README figures and exported report diagrams
+├── notebooks/      Research and experiment notebooks
+├── scratch/        Intermediate experiment/report artifacts
+├── test_output/    Sample generated MRI outputs
+├── docker-compose.yml
+├── docker-compose.tunnel.yml
+└── README.md
+```
+
+## Technology Stack
+
+### Application layer
+
+- Next.js
+- React
+- TypeScript
+- Tailwind CSS
+
+### Backend and orchestration
+
+- FastAPI
+- Celery
+- Redis
+- PostgreSQL
+- MinIO / object storage
+
+### AI and XAI
+
+- YOLOv11
+- DynUNet
+- DenseNet169
+- CoxPH-based multimodal prognosis
+- ODAM
+- Seg-Eigen-CAM
+- Finer-CAM
+- Grad-CAM / Grad-CAM++ / LayerCAM
+
+## Quick Start
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Expected frontend environment:
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_USE_MOCK_DATA=false
+```
+
+### Backend and infrastructure
+
+```bash
+docker compose up --build
+```
+
+This starts the main backend services used by the web platform and asynchronous AI workflow.
+
+### API documentation
+
+Once the backend is running:
+
+```text
+http://localhost:8000/docs
+```
+
+## Research Notes
+
+The thesis report describes the project in six major parts:
+
+- motivation and problem setting
+- literature review
+- theoretical background
+- proposed architecture and system design
+- experiments and evaluation
+- conclusions and future directions
+
+The README intentionally focuses on the implementation-facing summary, while the full report provides the detailed academic discussion, data protocol, and metric interpretation.
+
+## Authors
+
+- Pham Huynh Quoc Dat
+- Nguyen Hai Dang
+- Vuong Quoc An
+
+Academic advisor:
+
+- Dr. Trinh Hung Cuong
+
+## Acknowledgment
+
+The architecture figures and result summaries in this README are adapted from the attached thesis report and the experiment artifacts packaged with this repository.

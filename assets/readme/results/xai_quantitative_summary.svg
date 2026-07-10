@@ -1,0 +1,50 @@
+<svg width="1200" height="520" viewBox="0 0 1200 520" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">XAI quantitative summary</title>
+  <desc id="desc">Bar chart summarizing ODAM, Seg-Eigen-CAM, and Finer-CAM metrics.</desc>
+  <rect width="1200" height="520" fill="#ffffff"/>
+  <text x="600" y="44" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" fill="#111827">XAI Quantitative Summary</text>
+  <text x="600" y="74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#6b7280">Heatmap relevance to model decisions across detection, segmentation, and classification</text>
+
+  <line x1="80" y1="450" x2="1140" y2="450" stroke="#111827" stroke-width="2"/>
+  <line x1="80" y1="100" x2="80" y2="450" stroke="#111827" stroke-width="2"/>
+
+  <g font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#6b7280">
+    <line x1="80" y1="450" x2="1140" y2="450" stroke="#e5e7eb"/>
+    <text x="54" y="455">0%</text>
+    <line x1="80" y1="380" x2="1140" y2="380" stroke="#e5e7eb"/>
+    <text x="44" y="385">20%</text>
+    <line x1="80" y1="310" x2="1140" y2="310" stroke="#e5e7eb"/>
+    <text x="44" y="315">40%</text>
+    <line x1="80" y1="240" x2="1140" y2="240" stroke="#e5e7eb"/>
+    <text x="44" y="245">60%</text>
+    <line x1="80" y1="170" x2="1140" y2="170" stroke="#e5e7eb"/>
+    <text x="44" y="175">80%</text>
+    <line x1="80" y1="100" x2="1140" y2="100" stroke="#e5e7eb"/>
+    <text x="34" y="105">100%</text>
+  </g>
+
+  <rect x="120" y="104" width="140" height="346" fill="#2563eb"/>
+  <text x="190" y="94" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#2563eb">98.98%</text>
+  <text x="190" y="472" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111827">ODAM</text>
+  <text x="190" y="492" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111827">Pointing BBox</text>
+
+  <rect x="320" y="161" width="140" height="289" fill="#3b82f6"/>
+  <text x="390" y="151" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#3b82f6">82.55%</text>
+  <text x="390" y="472" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111827">ODAM</text>
+  <text x="390" y="492" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111827">Drop@20</text>
+
+  <rect x="520" y="103" width="140" height="347" fill="#10b981"/>
+  <text x="590" y="93" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#10b981">99.08%</text>
+  <text x="590" y="472" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111827">Seg-Eigen-CAM</text>
+  <text x="590" y="492" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111827">Pointing GT Mask</text>
+
+  <rect x="720" y="367" width="140" height="83" fill="#8b5cf6"/>
+  <text x="790" y="357" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#8b5cf6">23.77%</text>
+  <text x="790" y="472" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111827">Finer-CAM</text>
+  <text x="790" y="492" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111827">Drop@20</text>
+
+  <rect x="920" y="305" width="140" height="145" fill="#7c3aed"/>
+  <text x="990" y="295" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#7c3aed">41.50%</text>
+  <text x="990" y="472" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111827">Finer-CAM</text>
+  <text x="990" y="492" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111827">Relative Drop@20</text>
+</svg>

@@ -1,0 +1,30 @@
+<svg width="1200" height="360" viewBox="0 0 1200 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Metrics highlights</title>
+  <desc id="desc">Three cards summarizing detection, segmentation, and classification performance.</desc>
+  <rect width="1200" height="360" fill="#ffffff"/>
+  <text x="600" y="40" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" fill="#111827">Key Experimental Highlights</text>
+
+  <rect x="50" y="80" width="340" height="220" rx="16" fill="#ffffff" stroke="#60a5fa" stroke-width="3"/>
+  <text x="80" y="116" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#2563eb">Detection (YOLOv11)</text>
+  <line x1="78" y1="132" x2="360" y2="132" stroke="#e5e7eb"/>
+  <text x="80" y="170" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#111827">Precision <tspan font-weight="700" fill="#2563eb">95.25%</tspan></text>
+  <text x="80" y="204" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#111827">Recall <tspan font-weight="700" fill="#2563eb">86.20%</tspan></text>
+  <text x="80" y="238" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#111827">F1-score <tspan font-weight="700" fill="#2563eb">90.50%</tspan></text>
+  <text x="80" y="272" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#111827">mAP@50 <tspan font-weight="700" fill="#2563eb">85.39%</tspan></text>
+
+  <rect x="430" y="80" width="340" height="220" rx="16" fill="#ffffff" stroke="#38bdf8" stroke-width="3"/>
+  <text x="460" y="116" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#0284c7">Segmentation (DynUNet)</text>
+  <line x1="458" y1="132" x2="740" y2="132" stroke="#e5e7eb"/>
+  <text x="460" y="170" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#111827">Dice score <tspan font-weight="700" fill="#0284c7">92.77%</tspan></text>
+  <text x="460" y="204" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#111827">IoU <tspan font-weight="700" fill="#0284c7">87.03%</tspan></text>
+  <text x="460" y="238" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#111827">Sensitivity <tspan font-weight="700" fill="#0284c7">92.77%</tspan></text>
+  <text x="460" y="272" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#111827">Specificity <tspan font-weight="700" fill="#0284c7">96.83%</tspan></text>
+
+  <rect x="810" y="80" width="340" height="220" rx="16" fill="#ffffff" stroke="#818cf8" stroke-width="3"/>
+  <text x="840" y="116" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#4f46e5">Classification (DenseNet169)</text>
+  <line x1="838" y1="132" x2="1120" y2="132" stroke="#e5e7eb"/>
+  <text x="840" y="170" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#111827">Accuracy <tspan font-weight="700" fill="#4f46e5">97.55%</tspan></text>
+  <text x="840" y="204" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#111827">Macro-F1 <tspan font-weight="700" fill="#4f46e5">97.54%</tspan></text>
+  <text x="840" y="238" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#111827">ROC-AUC <tspan font-weight="700" fill="#4f46e5">&gt; 0.99</tspan></text>
+  <text x="840" y="272" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#111827">Inference time <tspan font-weight="700" fill="#4f46e5">0.029s</tspan></text>
+</svg>

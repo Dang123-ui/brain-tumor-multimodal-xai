@@ -1,0 +1,78 @@
+<svg width="1200" height="640" viewBox="0 0 1200 640" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Technical objectives versus achieved results</title>
+  <desc id="desc">Bar chart comparing target metrics and achieved metrics for detection, segmentation, and classification.</desc>
+  <rect width="1200" height="640" fill="#ffffff"/>
+  <text x="600" y="44" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" fill="#111827">Comparison Between Technical Targets and Achieved Results</text>
+  <text x="600" y="74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#6b7280">Detection, segmentation, and classification metrics reported in the thesis</text>
+
+  <line x1="80" y1="560" x2="1140" y2="560" stroke="#111827" stroke-width="2"/>
+  <line x1="80" y1="100" x2="80" y2="560" stroke="#111827" stroke-width="2"/>
+
+  <g font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#6b7280">
+    <line x1="80" y1="560" x2="1140" y2="560" stroke="#e5e7eb"/>
+    <text x="54" y="565">0%</text>
+    <line x1="80" y1="468" x2="1140" y2="468" stroke="#e5e7eb"/>
+    <text x="44" y="473">20%</text>
+    <line x1="80" y1="376" x2="1140" y2="376" stroke="#e5e7eb"/>
+    <text x="44" y="381">40%</text>
+    <line x1="80" y1="284" x2="1140" y2="284" stroke="#e5e7eb"/>
+    <text x="44" y="289">60%</text>
+    <line x1="80" y1="192" x2="1140" y2="192" stroke="#e5e7eb"/>
+    <text x="44" y="197">80%</text>
+    <line x1="80" y1="100" x2="1140" y2="100" stroke="#e5e7eb"/>
+    <text x="34" y="105">100%</text>
+  </g>
+
+  <g font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#111827">
+    <rect x="120" y="146" width="26" height="14" fill="#d1d5db"/><text x="156" y="158">Target</text>
+    <rect x="250" y="146" width="26" height="14" fill="#2563eb"/><text x="286" y="158">Achieved</text>
+  </g>
+
+  <rect x="120" y="146" width="38" height="414" fill="#d1d5db"/>
+  <rect x="162" y="122" width="38" height="438" fill="#2563eb"/>
+  <text x="181" y="114" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="#2563eb">95.25%</text>
+  <text x="160" y="586" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827">Detection</text>
+  <text x="160" y="604" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827">Precision</text>
+
+  <rect x="250" y="146" width="38" height="414" fill="#d1d5db"/>
+  <rect x="292" y="164" width="38" height="396" fill="#2563eb"/>
+  <text x="311" y="156" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="#2563eb">86.20%</text>
+  <text x="290" y="586" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827">Detection</text>
+  <text x="290" y="604" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827">Recall</text>
+
+  <rect x="380" y="169" width="38" height="391" fill="#d1d5db"/>
+  <rect x="422" y="144" width="38" height="416" fill="#2563eb"/>
+  <text x="441" y="136" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="#2563eb">90.50%</text>
+  <text x="420" y="586" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827">Detection</text>
+  <text x="420" y="604" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827">F1</text>
+
+  <rect x="510" y="169" width="38" height="391" fill="#d1d5db"/>
+  <rect x="552" y="133" width="38" height="427" fill="#2563eb"/>
+  <text x="571" y="125" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="#2563eb">92.77%</text>
+  <text x="550" y="586" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827">Segmentation</text>
+  <text x="550" y="604" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827">Dice</text>
+
+  <rect x="640" y="215" width="38" height="345" fill="#d1d5db"/>
+  <rect x="682" y="160" width="38" height="400" fill="#2563eb"/>
+  <text x="701" y="152" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="#2563eb">87.03%</text>
+  <text x="680" y="586" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827">Segmentation</text>
+  <text x="680" y="604" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827">IoU</text>
+
+  <rect x="770" y="123" width="38" height="437" fill="#d1d5db"/>
+  <rect x="812" y="111" width="38" height="449" fill="#2563eb"/>
+  <text x="831" y="103" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="#2563eb">97.55%</text>
+  <text x="810" y="586" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827">Classification</text>
+  <text x="810" y="604" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827">Accuracy</text>
+
+  <rect x="900" y="169" width="38" height="391" fill="#d1d5db"/>
+  <rect x="942" y="111" width="38" height="449" fill="#2563eb"/>
+  <text x="961" y="103" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="#2563eb">97.54%</text>
+  <text x="940" y="586" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827">Classification</text>
+  <text x="940" y="604" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827">Macro-F1</text>
+
+  <rect x="1030" y="146" width="38" height="414" fill="#d1d5db"/>
+  <rect x="1072" y="102" width="38" height="458" fill="#2563eb"/>
+  <text x="1091" y="94" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="#2563eb">99.45%</text>
+  <text x="1070" y="586" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827">Classification</text>
+  <text x="1070" y="604" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827">ROC-AUC</text>
+</svg>
