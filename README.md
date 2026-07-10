@@ -61,6 +61,93 @@ The prognosis branch fuses MRI, WSI, RNA, and clinical embeddings using attentio
 
 ![Multimodal fusion architecture](assets/readme/multimodal_fusion_architecture.png)
 
+## Clinical Chatbox Agent
+
+The web platform also includes a floating clinical chatbox Agent designed to help doctors interact with the system in a more natural workflow.
+
+### What the Agent does
+
+- answers patient-centric questions from the current web context
+- summarizes diagnosis history and AI outputs
+- explains MRI/XAI results in natural language
+- supports quick MRI diagnosis directly from the chatbox
+- guides the user to review-related actions when classification results need expert confirmation
+- streams responses token by token for a live conversational experience
+
+### Agent architecture in the web system
+
+The chatbox is implemented as a context-aware application layer on top of the main backend:
+
+1. **Frontend widget**
+   - floating chat entry available across pages
+   - sends `message`, `current_page`, `patient_id`, and `image_id`
+   - supports file attachment for quick MRI diagnosis
+
+2. **Planner and validation layer**
+   - classifies user intent
+   - decides whether the query needs patient context, image context, notifications, or quick MRI execution
+   - validates whether required identifiers are present before tool execution
+
+3. **Tool execution layer**
+   - loads patient profile
+   - loads diagnosis history
+   - loads image analysis and XAI metadata
+   - loads system notifications
+   - uploads MRI and starts the MRI pipeline through the chat workflow
+
+4. **LLM response layer**
+   - uses Gemini as the response model
+   - formats the final answer in clinician-friendly text
+   - avoids inventing patient data by grounding responses on tool outputs
+
+### Current chatbox capabilities
+
+Based on the current implementation in `backend/agent` and the frontend widget, the Agent supports:
+
+- **Context-aware patient QA**
+  - understands which patient or result page the doctor is currently viewing
+  - answers questions such as diagnosis label, confidence, risk group, and recent history
+
+- **Streaming responses**
+  - backend exposes a streaming endpoint for incremental generation
+  - frontend renders the answer progressively instead of waiting for the full text
+
+- **Conversation memory**
+  - conversation threads are stored in the database
+  - messages can be reloaded from chat history
+  - conversations can be summarized and deleted from the UI
+
+- **Quick MRI diagnosis through chatbox**
+  - the doctor can attach an MRI file directly in chat
+  - if no patient context is available, the Agent interrupts and asks the user to choose a patient
+  - after patient selection, the Agent resumes the MRI pipeline automatically
+  - once inference finishes, the Agent summarizes the result in chat and redirects to the result page
+
+- **Review-aware assistance**
+  - the Agent can surface review-related information for low-confidence classification cases
+  - the workflow aligns with expert confirmation and relabeling in the web platform
+
+### Backend entry points
+
+The main Agent backend currently includes:
+
+- `/agent/chat`
+- `/agent/chat/stream`
+- `/agent/conversations`
+- `/agent/conversations/{thread_id}`
+- `/agent/quick-mri`
+- `/agent/quick-mri/{image_id}/summary`
+- `/agent/notifications`
+
+### Why this matters
+
+The chatbox Agent is not just a generic assistant layered on top of the web UI. It acts as an orchestration interface for the existing clinical system:
+
+- it reduces navigation friction for doctors
+- it exposes AI outputs through natural-language interaction
+- it bridges structured medical records, image analysis, XAI artifacts, and asynchronous inference tasks
+- it provides a foundation for future RAG-Agent and human-in-the-loop workflows
+
 ## Explainable AI Design
 
 The project uses different XAI mechanisms for different prediction tasks instead of forcing one heatmap method onto every branch.
