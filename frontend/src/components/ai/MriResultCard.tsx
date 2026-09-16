@@ -452,7 +452,19 @@ export default function MriResultCard({
                 </div>
               </div>
 
-              {result?.tumor_label && !noTumorDetected && (
+              {result?.tumor_label && !noTumorDetected && !shouldWarnClassificationReview && !hasCompletedClassificationReview && !showReviewForm && (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowReviewForm(true)}
+                    className="rounded-xl border border-teal-500/30 px-4 py-2 text-sm font-semibold text-teal-200 hover:bg-teal-500/10"
+                  >
+                    Xác nhận phân loại
+                  </button>
+                </div>
+              )}
+
+              {result?.tumor_label && !noTumorDetected && (shouldWarnClassificationReview || hasCompletedClassificationReview || showReviewForm) && (
                 <div
                   className={`rounded-xl border p-5 !text-[#0F172A] shadow-sm ${
                     shouldWarnClassificationReview
