@@ -1,14 +1,18 @@
 import io
 import os
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Tuple
 
 import pydicom
+from dotenv import load_dotenv
 from minio import Minio
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 
 # ============================================================
 # MINIO CLIENT

@@ -361,9 +361,9 @@ async def quick_mri_diagnosis(
     if not patient:
         raise HTTPException(status_code=404, detail=f"Không tìm thấy bệnh nhân '{patient_id}'")
 
-    ensure_bucket_exists(BUCKET_NAME)
-
     try:
+        ensure_bucket_exists(BUCKET_NAME)
+
         file_bytes = await file.read()
         prepared_stream, content_type = prepare_mri_upload(file_bytes, file.filename)
         unique_filename = f"{uuid.uuid4()}_{file.filename or 'chat_mri'}"
