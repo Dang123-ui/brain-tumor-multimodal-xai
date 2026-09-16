@@ -3,6 +3,7 @@
 import {
   createContext,
   ReactNode,
+  useCallback,
   useContext,
   useMemo,
   useState,
@@ -24,19 +25,33 @@ type AgentWidgetContextValue = {
 };
 
 const AgentWidgetContext = createContext<AgentWidgetContextValue | null>(null);
+const ACTIVE_THREAD_STORAGE_KEY = "neuro-agent-active-thread-id";
 
 export function AgentWidgetProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<AgentWidgetMode>("bubble");
-  const [activeThreadId, setActiveThreadId] = useState<string | undefined>();
+  const [activeThreadIdState, setActiveThreadIdState] = useState<string | undefined>(() => {
+    if (typeof window === "undefined") return undefined;
+    return localStorage.getItem(ACTIVE_THREAD_STORAGE_KEY) || undefined;
+  });
   const [draftMessage, setDraftMessage] = useState("");
   const [selectedPatientId, setSelectedPatientId] = useState<string | undefined>();
   const [selectedImageId, setSelectedImageId] = useState<number | undefined>();
+
+  const setActiveThreadId = useCallback((threadId?: string) => {
+    setActiveThreadIdState(threadId);
+    if (typeof window === "undefined") return;
+    if (threadId) {
+      localStorage.setItem(ACTIVE_THREAD_STORAGE_KEY, threadId);
+    } else {
+      localStorage.removeItem(ACTIVE_THREAD_STORAGE_KEY);
+    }
+  }, []);
 
   const value = useMemo(
     () => ({
       mode,
       setMode,
-      activeThreadId,
+      activeThreadId: activeThreadIdState,
       setActiveThreadId,
       draftMessage,
       setDraftMessage,
@@ -45,7 +60,7 @@ export function AgentWidgetProvider({ children }: { children: ReactNode }) {
       selectedImageId,
       setSelectedImageId,
     }),
-    [mode, activeThreadId, draftMessage, selectedPatientId, selectedImageId],
+    [mode, activeThreadIdState, setActiveThreadId, draftMessage, selectedPatientId, selectedImageId],
   );
 
   return (
@@ -62,4 +77,3 @@ export function useAgentWidget() {
   }
   return context;
 }
-

@@ -250,7 +250,35 @@ function formatResponseMs(value?: number) {
 }
 
 function conversationTitle(item: AgentConversation) {
-  return item.summary || item.title || `Hội thoại ${item.thread_id.slice(0, 8)}`;
+  return item.title || item.summary || "Cuộc trò chuyện mới";
+}
+
+function startOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+function conversationGroupLabel(item: AgentConversation) {
+  const rawDate = item.updated_at || item.created_at;
+  if (!rawDate) return "Older";
+  const date = new Date(rawDate);
+  if (Number.isNaN(date.getTime())) return "Older";
+  const diffDays = Math.floor((startOfDay(new Date()) - startOfDay(date)) / 86400000);
+  if (diffDays <= 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  return "Older";
+}
+
+function groupConversations(items: AgentConversation[]) {
+  const groups = [
+    { label: "Today", items: [] as AgentConversation[] },
+    { label: "Yesterday", items: [] as AgentConversation[] },
+    { label: "Older", items: [] as AgentConversation[] },
+  ];
+  items.forEach((item) => {
+    const label = conversationGroupLabel(item);
+    groups.find((group) => group.label === label)?.items.push(item);
+  });
+  return groups.filter((group) => group.items.length);
 }
 
 function renderInlineMarkdown(text: string) {
@@ -465,6 +493,8 @@ export function AgentFloatingWidget() {
   const [previewImage, setPreviewImage] = useState<ImagePreviewState | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const shellRef = useRef<HTMLElement | null>(null);
+  const hydratedThreadRef = useRef<string | null>(null);
 
   const panelOpen = mode === "panel" || mode === "expanded";
   const isExpanded = mode === "expanded";
@@ -485,6 +515,17 @@ export function AgentFloatingWidget() {
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [messages, busy, panelOpen]);
+
+  useEffect(() => {
+    if (!panelOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target || shellRef.current?.contains(target)) return;
+      setMode("bubble");
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [panelOpen, setMode]);
 
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -552,7 +593,9 @@ export function AgentFloatingWidget() {
     setHistoryLoading(true);
     try {
       const response = await agentApi.conversationMessages(threadId);
-      setActiveThreadId(threadId);
+      const resolvedThreadId = response.data.conversation_id || response.data.thread_id || threadId;
+      hydratedThreadRef.current = resolvedThreadId;
+      setActiveThreadId(resolvedThreadId);
       setMessages(
         response.data.messages
           .filter((message) => message.role === "user" || message.role === "assistant" || message.role === "tool" || message.role === "error")
@@ -571,14 +614,32 @@ export function AgentFloatingWidget() {
       );
       setShowHistory(false);
     } catch {
+      hydratedThreadRef.current = null;
+      setActiveThreadId(undefined);
       append(newMessage("error", "Không thể tải lại lịch sử hội thoại."));
     } finally {
       setHistoryLoading(false);
     }
   };
 
+  useEffect(() => {
+    if (
+      !panelOpen ||
+      !activeThreadId ||
+      busy ||
+      messages.length > 1 ||
+      hydratedThreadRef.current === activeThreadId
+    ) {
+      return;
+    }
+    hydratedThreadRef.current = activeThreadId;
+    void loadConversation(activeThreadId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeThreadId, busy, messages.length, panelOpen]);
+
   function startNewChat() {
     setActiveThreadId(undefined);
+    hydratedThreadRef.current = null;
     setMessages([
       newMessage(
         "assistant",
@@ -719,6 +780,7 @@ export function AgentFloatingWidget() {
       await agentApi.chatStream(
         {
           message: content,
+          conversation_id: activeThreadId,
           thread_id: activeThreadId,
           current_page: currentPage,
           patient_id: activePatientId,
@@ -727,7 +789,11 @@ export function AgentFloatingWidget() {
         {
           onStatus: (data) => {
             const threadId =
-              typeof data.thread_id === "string" ? data.thread_id : undefined;
+              typeof data.conversation_id === "string"
+                ? data.conversation_id
+                : typeof data.thread_id === "string"
+                  ? data.thread_id
+                  : undefined;
             if (threadId) {
               setActiveThreadId(threadId);
             }
@@ -748,7 +814,7 @@ export function AgentFloatingWidget() {
             }));
           },
           onFinal: (data) => {
-            setActiveThreadId(data.thread_id);
+            setActiveThreadId(data.conversation_id || data.thread_id);
             updateMessage(assistantMessage.id, (message) => ({
               ...message,
               content: data.message || message.content,
@@ -805,6 +871,7 @@ export function AgentFloatingWidget() {
 
   return (
     <section
+      ref={shellRef}
       className={`agent-shell ${isExpanded ? "agent-shell-expanded" : ""}`}
       aria-label="NeuroDiagnosis Agent"
     >
@@ -894,44 +961,51 @@ export function AgentFloatingWidget() {
                     Chưa có hội thoại đã lưu.
                   </div>
                 )}
-                {historyItems.map((item) => {
-                  const active = activeThreadId === item.thread_id;
-                  return (
-                    <div
-                      key={item.thread_id}
-                      className={[
-                        "group rounded-xl border bg-[#F6FAF9] transition",
-                        active
-                          ? "border-[#0F9F8F] bg-white"
-                          : "border-[#E2E8F0] hover:border-[#0F9F8F] hover:bg-white",
-                      ].join(" ")}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => void loadConversation(item.thread_id)}
-                        className="block w-full px-3 pb-2 pt-3 text-left"
-                      >
-                        <div className="truncate text-sm font-medium text-[#0F172A]">
-                          {conversationTitle(item)}
-                        </div>
-                        <div className="mt-1 flex items-center gap-2 text-xs text-[#64748B]">
-                          <Clock3 className="h-3.5 w-3.5" />
-                          {formatChatTime(item.updated_at || item.created_at || undefined)}
-                        </div>
-                      </button>
-                      <div className="flex justify-end px-2 pb-2">
-                        <button
-                          type="button"
-                          onClick={() => setConversationToDelete(item)}
-                          className="rounded-lg p-1.5 text-[#64748B] opacity-0 transition hover:bg-red-50 hover:text-[#DC2626] group-hover:opacity-100"
-                          title="Xóa hội thoại"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
+                {groupConversations(historyItems).map((group) => (
+                  <div key={group.label} className="space-y-2">
+                    <div className="px-1 text-[11px] font-semibold uppercase tracking-wide text-[#94A3B8]">
+                      {group.label}
                     </div>
-                  );
-                })}
+                    {group.items.map((item) => {
+                      const active = activeThreadId === item.thread_id;
+                      return (
+                        <div
+                          key={item.thread_id}
+                          className={[
+                            "group rounded-xl border bg-[#F6FAF9] transition",
+                            active
+                              ? "border-[#0F9F8F] bg-white"
+                              : "border-[#E2E8F0] hover:border-[#0F9F8F] hover:bg-white",
+                          ].join(" ")}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => void loadConversation(item.thread_id)}
+                            className="block w-full px-3 pb-2 pt-3 text-left"
+                          >
+                            <div className="truncate text-sm font-medium text-[#0F172A]">
+                              {conversationTitle(item)}
+                            </div>
+                            <div className="mt-1 flex items-center gap-2 text-xs text-[#64748B]">
+                              <Clock3 className="h-3.5 w-3.5" />
+                              {formatChatTime(item.updated_at || item.created_at || undefined)}
+                            </div>
+                          </button>
+                          <div className="flex justify-end px-2 pb-2">
+                            <button
+                              type="button"
+                              onClick={() => setConversationToDelete(item)}
+                              className="rounded-lg p-1.5 text-[#64748B] opacity-0 transition hover:bg-red-50 hover:text-[#DC2626] group-hover:opacity-100"
+                              title="Xóa hội thoại"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
               </div>
             </aside>
           )}

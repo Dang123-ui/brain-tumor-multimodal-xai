@@ -14,11 +14,12 @@ def make_execute_tools(db: Session):
         for call in state.get("validated_tools", []):
             name = call["name"]
             try:
+                owner_user_id = None if state.get("role") in {"admin", "researcher"} else state.get("user_id")
                 tool_results[name] = execute_registered_tool(
                     db,
                     name,
                     call.get("args") or {},
-                    owner_user_id=state.get("user_id"),
+                    owner_user_id=owner_user_id,
                 )
             except Exception as exc:
                 errors.append({"tool": name, "error": str(exc)})

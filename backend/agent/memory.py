@@ -6,6 +6,15 @@ from sqlalchemy.orm import Session
 import models
 
 
+def title_from_message(message: str | None, max_length: int = 48) -> str | None:
+    cleaned = " ".join((message or "").strip().split())
+    if not cleaned:
+        return None
+    if len(cleaned) <= max_length:
+        return cleaned
+    return cleaned[: max_length - 3].rstrip() + "..."
+
+
 def get_or_create_conversation(
     db: Session,
     *,
@@ -64,6 +73,15 @@ def save_message(
         metadata_json=metadata,
     )
     db.add(message)
+    conversation = (
+        db.query(models.AgentConversation)
+        .filter(models.AgentConversation.thread_id == thread_id)
+        .first()
+    )
+    if conversation:
+        conversation.updated_at = datetime.datetime.utcnow()
+        if role == "user" and not conversation.title:
+            conversation.title = title_from_message(content)
     db.commit()
     db.refresh(message)
     return message
@@ -93,12 +111,33 @@ def load_recent_messages(db: Session, thread_id: str, limit: int = 12) -> list[d
 
 def list_conversations(db: Session, user_id: Optional[int], limit: int = 30) -> list[models.AgentConversation]:
     query = db.query(models.AgentConversation).filter(models.AgentConversation.deleted_at.is_(None))
-    if user_id:
+    if user_id is not None:
         query = query.filter(models.AgentConversation.user_id == user_id)
     return query.order_by(models.AgentConversation.updated_at.desc()).limit(limit).all()
 
 
-def load_conversation_messages(db: Session, thread_id: str, limit: int = 100) -> list[models.AgentMessage]:
+def get_conversation_by_thread(
+    db: Session,
+    thread_id: str,
+    user_id: Optional[int] = None,
+) -> models.AgentConversation | None:
+    query = db.query(models.AgentConversation).filter(
+        models.AgentConversation.thread_id == thread_id,
+        models.AgentConversation.deleted_at.is_(None),
+    )
+    if user_id:
+        query = query.filter(models.AgentConversation.user_id == user_id)
+    return query.first()
+
+
+def load_conversation_messages(
+    db: Session,
+    thread_id: str,
+    limit: int = 100,
+    user_id: Optional[int] = None,
+) -> list[models.AgentMessage]:
+    if not get_conversation_by_thread(db, thread_id, user_id=user_id):
+        return []
     return (
         db.query(models.AgentMessage)
         .filter(
@@ -111,13 +150,9 @@ def load_conversation_messages(db: Session, thread_id: str, limit: int = 100) ->
     )
 
 
-def soft_delete_conversation(db: Session, thread_id: str) -> bool:
+def soft_delete_conversation(db: Session, thread_id: str, user_id: Optional[int] = None) -> bool:
     now = datetime.datetime.utcnow()
-    conversation = (
-        db.query(models.AgentConversation)
-        .filter(models.AgentConversation.thread_id == thread_id)
-        .first()
-    )
+    conversation = get_conversation_by_thread(db, thread_id, user_id=user_id)
     if not conversation:
         return False
     conversation.deleted_at = now

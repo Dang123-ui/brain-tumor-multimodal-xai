@@ -13,6 +13,7 @@ from agent.checkpoint import (
 from agent.executor import make_execute_tools
 from agent.llm import get_agent_model
 from agent.memory import (
+    get_conversation_by_thread,
     get_or_create_conversation,
     load_recent_messages,
     save_audit_log,
@@ -45,6 +46,15 @@ def _safe_user_id(current_user: dict[str, Any]) -> int | None:
         return int(raw)
     except Exception:
         return None
+
+
+def _resolve_thread_id(db: Session, user_id: int | None, conversation_id: str | None, thread_id: str | None) -> str:
+    requested_id = conversation_id or thread_id
+    if not requested_id:
+        return str(uuid.uuid4())
+    if get_conversation_by_thread(db, requested_id, user_id=user_id):
+        return requested_id
+    return str(uuid.uuid4())
 
 
 def _long_memory_namespace(user_id: int | None) -> tuple[str, ...]:
@@ -157,9 +167,11 @@ def build_response_prompt(db: Session, state: AgentState) -> str:
         f"{json.dumps(context_payload, ensure_ascii=False, default=str)}\n\n"
         "HÃ£y tráº£ lá»i Markdown Ä‘áº¹p, ngáº¯n gá»n, dá»±a trÃªn dá»¯ liá»‡u tool náº¿u cÃ³. "
         "Náº¿u tool_errors bÃ¡o thiáº¿u patient_id/image_id, hÃ£y há»i láº¡i bÃ¡c sÄ© cáº§n chá»n bá»‡nh nhÃ¢n/áº£nh nÃ o. "
-        "Náº¿u khÃ´ng cÃ³ tool_results vÃ¬ cÃ¢u há»i lÃ  kiáº¿n thá»©c chung, tráº£ lá»i kiáº¿n thá»©c chung. "
-        "KhÃ´ng bá»‹a dá»¯ liá»‡u bá»‡nh nhÃ¢n."
-    )
+            "Náº¿u khÃ´ng cÃ³ tool_results vÃ¬ cÃ¢u há»i lÃ  kiáº¿n thá»©c chung, tráº£ lá»i kiáº¿n thá»©c chung. "
+            "Neu answer_mode la system_analytics thi chi dung so lieu trong tool_results, phan biet patient count, diagnosis count va image count; "
+            "dinh nghia chan doan can phan tich lai la classification_confidence < 0.95 va chua co review hoan thanh. "
+            "KhÃ´ng bá»‹a dá»¯ liá»‡u bá»‡nh nhÃ¢n."
+        )
 
 
 def _is_history_analysis_request(state: AgentState) -> bool:
@@ -214,6 +226,8 @@ def build_response_prompt(db: Session, state: AgentState) -> str:
         "Khong bia du lieu benh nhan. "
         "Neu tool_errors bao thieu patient_id/image_id thi hay hoi lai bac si can chon benh nhan hoac anh nao. "
         "Neu cau hoi la kien thuc chung va khong co tool_results thi tra loi kien thuc chung. "
+        "Neu answer_mode la system_analytics thi chi dung so lieu trong tool_results, phan biet patient count, diagnosis count va image count; "
+        "dinh nghia chan doan can phan tich lai la classification_confidence < 0.95 va chua co review hoan thanh. "
         "Khi noi ve nhan phan loai MRI: neu khong co expert_tumor_label thi khong nhac expert label; "
         "neu classification_confidence >= 0.95 thi chi trinh bay AI label/confidence nhu ket qua AI, khong can noi can review; "
         "neu classification_confidence < 0.95 va chua co expert_tumor_label thi phai khuyen can bac si xem xet/xac nhan lai; "
@@ -377,14 +391,15 @@ def prepare_agent_state(
     db: Session,
     current_user: dict[str, Any],
     message: str,
+    conversation_id: str | None = None,
     thread_id: str | None = None,
     current_page: str | None = None,
     patient_id: str | None = None,
     image_id: int | None = None,
     selected_region: dict[str, Any] | None = None,
 ) -> AgentState:
-    resolved_thread_id = thread_id or str(uuid.uuid4())
     user_id = _safe_user_id(current_user)
+    resolved_thread_id = _resolve_thread_id(db, user_id, conversation_id, thread_id)
     patient = resolve_patient(db, patient_id)
     get_or_create_conversation(
         db,
@@ -491,14 +506,15 @@ def run_agent(
     db: Session,
     current_user: dict[str, Any],
     message: str,
+    conversation_id: str | None = None,
     thread_id: str | None = None,
     current_page: str | None = None,
     patient_id: str | None = None,
     image_id: int | None = None,
     selected_region: dict[str, Any] | None = None,
 ) -> AgentState:
-    resolved_thread_id = thread_id or str(uuid.uuid4())
     user_id = _safe_user_id(current_user)
+    resolved_thread_id = _resolve_thread_id(db, user_id, conversation_id, thread_id)
     patient = resolve_patient(db, patient_id)
     get_or_create_conversation(
         db,

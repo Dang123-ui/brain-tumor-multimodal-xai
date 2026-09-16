@@ -58,6 +58,34 @@ def _fallback_plan(state: AgentState, error: str | None = None) -> dict[str, Any
     tool_calls: list[dict[str, Any]] = []
     answer_mode = "general_knowledge"
 
+    if any(k in message for k in ["bao nhiêu", "bao nhieu", "tổng số", "tong so", "thống kê", "thong ke", "system", "toàn hệ thống", "toan he thong"]):
+        answer_mode = "system_analytics"
+        label = None
+        if "glioma" in message:
+            label = "Glioma"
+        elif "meningioma" in message:
+            label = "Meningioma"
+        elif "pituitary" in message or "tuyến yên" in message or "tuyen yen" in message:
+            label = "Pituitary tumor"
+        if any(k in message for k in ["cần phân tích", "can phan tich", "chờ review", "cho review", "cần review", "can review", "pending review"]):
+            tool_calls = [{"name": "get_diagnoses_requiring_review", "args": {"confidence_threshold": 0.95, "status": "pending"}}]
+        elif "rna" in message:
+            tool_calls = [{"name": "get_patient_statistics", "args": {"filters": {}}}]
+        elif label:
+            tool_calls = [
+                {"name": "get_patient_statistics", "args": {"filters": {"label": label}}},
+                {"name": "get_diagnosis_statistics", "args": {"filters": {"label": label}}},
+            ]
+        elif any(k in message for k in ["review", "final label", "confidence", "độ tin cậy", "do tin cay"]):
+            tool_calls = [{"name": "get_review_statistics", "args": {"filters": {"confidence_threshold": 0.95}}}]
+        else:
+            tool_calls = [{"name": "get_system_statistics", "args": {}}]
+        return {
+            "answer_mode": answer_mode,
+            "reason": error or "Fallback planner rule.",
+            "tool_calls": tool_calls,
+        }
+
     if any(k in message for k in ["bệnh án", "benh an", "hồ sơ", "ho so", "bệnh nhân này", "benh nhan nay", "lịch sử", "lich su", "tóm tắt", "tom tat"]):
         answer_mode = "patient_context"
         tool_calls = [
@@ -91,7 +119,7 @@ def plan_tools(state: AgentState) -> AgentState:
         "Hãy lập kế hoạch tool cho request sau.\n"
         "Schema JSON bắt buộc:\n"
         "{\n"
-        '  "answer_mode": "general_knowledge|patient_context|image_context|notification|quick_mri|other",\n'
+        '  "answer_mode": "GENERAL_QA|SYSTEM_ANALYTICS_QA|PATIENT_QA|DIAGNOSIS_HISTORY_QA|TIMELINE_REASONING|IMAGE_QA|XAI_QA|NOTIFICATION_QA|HUMAN_REVIEW|CLASSIFICATION_REVIEW_ACTION|QUICK_MRI_WORKFLOW|REPORT_SUMMARY|general_knowledge|system_analytics|patient_context|image_context|notification|quick_mri|other",\n'
         '  "reason": "lý do ngắn",\n'
         '  "tool_calls": [{"name": "tool_name", "args": {}}]\n'
         "}\n\n"
@@ -106,8 +134,23 @@ def plan_tools(state: AgentState) -> AgentState:
 
     if not isinstance(plan.get("tool_calls"), list):
         plan["tool_calls"] = []
+    raw_answer_mode = plan.get("answer_mode") or "general_knowledge"
+    mode_map = {
+        "GENERAL_QA": "general_knowledge",
+        "SYSTEM_ANALYTICS_QA": "system_analytics",
+        "PATIENT_QA": "patient_context",
+        "DIAGNOSIS_HISTORY_QA": "patient_context",
+        "TIMELINE_REASONING": "patient_context",
+        "REPORT_SUMMARY": "patient_context",
+        "IMAGE_QA": "image_context",
+        "XAI_QA": "image_context",
+        "NOTIFICATION_QA": "notification",
+        "HUMAN_REVIEW": "notification",
+        "CLASSIFICATION_REVIEW_ACTION": "notification",
+        "QUICK_MRI_WORKFLOW": "quick_mri",
+    }
     state["planned_tools"] = plan.get("tool_calls") or []
-    state["answer_mode"] = plan.get("answer_mode") or "general_knowledge"
-    state["intent"] = state["answer_mode"]
+    state["answer_mode"] = mode_map.get(str(raw_answer_mode), raw_answer_mode)
+    state["intent"] = str(raw_answer_mode)
     state["planner_reason"] = plan.get("reason")
     return state

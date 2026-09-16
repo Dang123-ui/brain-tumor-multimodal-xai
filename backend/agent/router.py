@@ -20,6 +20,7 @@ from agent.graph import (
 )
 from agent.llm import get_agent_model
 from agent.memory import (
+    get_conversation_by_thread,
     list_conversations,
     load_conversation_messages,
     soft_delete_conversation,
@@ -136,6 +137,7 @@ def chat(
         db=db,
         current_user=current_user,
         message=request.message,
+        conversation_id=request.conversation_id,
         thread_id=request.thread_id,
         current_page=request.current_page,
         patient_id=request.patient_id,
@@ -143,6 +145,7 @@ def chat(
         selected_region=request.selected_region,
     )
     return AgentChatResponse(
+        conversation_id=result["thread_id"],
         thread_id=result["thread_id"],
         message=result.get("final_response") or "",
         intent=result.get("intent") or "general",
@@ -161,6 +164,7 @@ async def chat_stream(
         db=db,
         current_user=current_user,
         message=request.message,
+        conversation_id=request.conversation_id,
         thread_id=request.thread_id,
         current_page=request.current_page,
         patient_id=request.patient_id,
@@ -170,14 +174,14 @@ async def chat_stream(
     thread_id = state["thread_id"]
 
     async def event_generator():
-        yield f"event: status\ndata: {json.dumps({'message': 'Đang lập kế hoạch và nạp context...', 'thread_id': thread_id}, ensure_ascii=False)}\n\n"
+        yield f"event: status\ndata: {json.dumps({'message': 'Đang lập kế hoạch và nạp context...', 'conversation_id': thread_id, 'thread_id': thread_id}, ensure_ascii=False)}\n\n"
         try:
             tool_state = run_agent_tool_steps(db, state)
             intent = tool_state.get("intent") or "general"
             actions = tool_state.get("actions") or []
             yield f"event: tool_result\ndata: {json.dumps({'intent': intent, 'actions': actions, 'tool_results': tool_state.get('tool_results')}, ensure_ascii=False)}\n\n"
 
-            yield f"event: status\ndata: {json.dumps({'message': 'Đang sinh câu trả lời...', 'thread_id': thread_id}, ensure_ascii=False)}\n\n"
+            yield f"event: status\ndata: {json.dumps({'message': 'Đang sinh câu trả lời...', 'conversation_id': thread_id, 'thread_id': thread_id}, ensure_ascii=False)}\n\n"
             prompt = build_response_prompt(db, tool_state)
             model = get_agent_model()
             chunks: list[str] = []
@@ -195,7 +199,7 @@ async def chat_stream(
 
             reply = "".join(chunks)
             finalize_agent_response(db=db, state=tool_state, final_response=reply)
-            yield f"event: final\ndata: {json.dumps({'thread_id': thread_id, 'intent': intent, 'message': reply, 'actions': actions}, ensure_ascii=False)}\n\n"
+            yield f"event: final\ndata: {json.dumps({'conversation_id': thread_id, 'thread_id': thread_id, 'intent': intent, 'message': reply, 'actions': actions}, ensure_ascii=False)}\n\n"
         except Exception as exc:
             fallback = (
                 "Agent chưa thể stream câu trả lời lúc này. "
@@ -208,7 +212,7 @@ async def chat_stream(
                 finalize_agent_response(db=db, state=state, final_response=fallback)
             except Exception as save_exc:
                 print(f"[AGENT] Stream fallback save skipped: {save_exc}")
-            yield f"event: final\ndata: {json.dumps({'thread_id': thread_id, 'intent': state.get('intent') or 'error', 'message': fallback, 'actions': []}, ensure_ascii=False)}\n\n"
+            yield f"event: final\ndata: {json.dumps({'conversation_id': thread_id, 'thread_id': thread_id, 'intent': state.get('intent') or 'error', 'message': fallback, 'actions': []}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -255,6 +259,7 @@ def get_conversations(
         "items": [
             {
                 "thread_id": item.thread_id,
+                "conversation_id": item.thread_id,
                 "patient_id": item.patient_id,
                 "image_id": item.image_id,
                 "title": item.title,
@@ -274,8 +279,13 @@ def get_conversation(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    messages = load_conversation_messages(db, thread_id)
+    user_id = _current_user_id(current_user)
+    conversation = get_conversation_by_thread(db, thread_id, user_id=user_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Không tìm thấy hội thoại")
+    messages = load_conversation_messages(db, thread_id, user_id=user_id)
     return {
+        "conversation_id": thread_id,
         "thread_id": thread_id,
         "messages": [
             {
@@ -297,7 +307,7 @@ def delete_conversation(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    deleted = soft_delete_conversation(db, thread_id)
+    deleted = soft_delete_conversation(db, thread_id, user_id=_current_user_id(current_user))
     if not deleted:
         raise HTTPException(status_code=404, detail="Không tìm thấy hội thoại")
     return {"deleted": True}
@@ -455,27 +465,29 @@ def notifications(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = _current_user_id(current_user)
-    low_confidence = (
+    owner_user_id = None if current_user.get("role") in {"admin", "researcher"} else user_id
+    low_confidence_query = (
         db.query(models.AnalysisResult)
         .join(models.Patient, models.AnalysisResult.patient_id == models.Patient.id)
         .filter(
-            models.Patient.owner_user_id == user_id,
             models.AnalysisResult.no_tumor_detected.is_(False),
             models.AnalysisResult.classification_confidence.isnot(None),
             models.AnalysisResult.classification_confidence < 0.95,
         )
-        .count()
     )
-    stale_risk = (
+    stale_risk_query = (
         db.query(models.AnalysisResult)
         .join(models.Patient, models.AnalysisResult.patient_id == models.Patient.id)
         .filter(
-            models.Patient.owner_user_id == user_id,
             models.AnalysisResult.no_tumor_detected.is_(True),
             models.AnalysisResult.risk_score.isnot(None),
         )
-        .count()
     )
+    if owner_user_id is not None:
+        low_confidence_query = low_confidence_query.filter(models.Patient.owner_user_id == owner_user_id)
+        stale_risk_query = stale_risk_query.filter(models.Patient.owner_user_id == owner_user_id)
+    low_confidence = low_confidence_query.count()
+    stale_risk = stale_risk_query.count()
     items = []
     if low_confidence:
         items.append({"type": "review_required", "message": f"Có {low_confidence} ca confidence thấp cần review."})

@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 class AgentChatRequest(BaseModel):
     message: str
+    conversation_id: Optional[str] = None
     thread_id: Optional[str] = None
     current_page: Optional[str] = None
     patient_id: Optional[str] = None
@@ -14,6 +15,7 @@ class AgentChatRequest(BaseModel):
 
 
 class AgentChatResponse(BaseModel):
+    conversation_id: str
     thread_id: str
     message: str
     intent: str
@@ -22,6 +24,7 @@ class AgentChatResponse(BaseModel):
 
 
 class AgentConversationResponse(BaseModel):
+    conversation_id: str
     thread_id: str
     patient_id: Optional[int] = None
     image_id: Optional[int] = None

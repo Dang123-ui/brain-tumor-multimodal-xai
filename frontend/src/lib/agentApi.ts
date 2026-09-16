@@ -3,6 +3,7 @@ import { api } from "@/lib/api";
 export type AgentMessageRole = "user" | "assistant" | "tool" | "error";
 
 export type AgentChatResponse = {
+  conversation_id: string;
   thread_id: string;
   message: string;
   intent: string;
@@ -11,6 +12,7 @@ export type AgentChatResponse = {
 };
 
 export type AgentConversation = {
+  conversation_id?: string;
   thread_id: string;
   patient_id?: number | null;
   image_id?: number | null;
@@ -53,6 +55,7 @@ export type QuickMriResponse = {
 
 export type AgentChatPayload = {
   message: string;
+  conversation_id?: string;
   thread_id?: string;
   current_page?: string;
   patient_id?: string;
@@ -61,6 +64,7 @@ export type AgentChatPayload = {
 };
 
 export type AgentStreamFinal = {
+  conversation_id?: string;
   thread_id: string;
   intent: string;
   message: string;
@@ -218,7 +222,7 @@ export const agentApi = {
   },
 
   conversationMessages: async (threadId: string) => {
-    return api.get<{ thread_id: string; messages: AgentStoredMessage[] }>(
+    return api.get<{ conversation_id?: string; thread_id: string; messages: AgentStoredMessage[] }>(
       `/agent/conversations/${encodeURIComponent(threadId)}`,
     );
   },
