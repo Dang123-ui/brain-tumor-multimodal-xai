@@ -2,6 +2,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+import crud
 import models
 import schemas
 from celery_app import celery_app
@@ -44,9 +45,31 @@ def _create_inference_task(
         print(f"[API] Da gui task_id={db_task.id} thanh cong.")
     except Exception as e:
         print(f"[API] LOI KHI GUI TASK SANG CELERY: {e}")
-        # Van tra ve task_id de frontend co the polling, worker se xu ly sau khi ket noi lai
+        db_task.status = "failed"
+        db_task.error_message = f"Khong the gui task sang Celery: {e}"
+        db.commit()
+        raise HTTPException(status_code=503, detail=db_task.error_message) from e
         
     return db_task
+
+
+def _ensure_celery_worker_available() -> None:
+    try:
+        responses = celery_app.control.ping(timeout=0.7)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Celery worker chua san sang: {exc}",
+        ) from exc
+
+    if not responses:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Celery worker chua chay nen pipeline se bi ket pending. "
+                "Hay bat worker: backend\\.venv\\Scripts\\celery.exe -A celery_app.celery_app worker --loglevel=info --pool=solo"
+            ),
+        )
 
 
 # ============================================================
@@ -61,7 +84,7 @@ def trigger_mri_inference(
     current_user: dict = Depends(get_current_user),
 ):
     # Xác minh ảnh tồn tại trong DB
-    image = db.query(models.Image).filter(models.Image.id == image_id).first()
+    image = crud.get_image_for_user(db, image_id, current_user)
     if not image:
         raise HTTPException(status_code=404, detail="Không tìm thấy ảnh MRI")
 
@@ -70,6 +93,8 @@ def trigger_mri_inference(
             status_code=400,
             detail=f"Ảnh này có modality='{image.modality}', endpoint này chỉ xử lý MRI hoặc MRI_SERIES",
         )
+
+    _ensure_celery_worker_available()
 
     # Tương tự như Prognosis, bỏ qua việc check task cũ để tránh deadlock khi worker sập.
 
@@ -99,9 +124,8 @@ def trigger_prognosis_inference(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    import crud
     # Xác minh bệnh nhân tồn tại (hỗ trợ cả ID số và External ID chuỗi)
-    patient = crud.get_patient_by_id_or_external(db, patient_id)
+    patient = crud.get_patient_for_user(db, patient_id, current_user)
     if not patient:
         raise HTTPException(status_code=404, detail=f"Không tìm thấy bệnh nhân với ID '{patient_id}'")
 
@@ -114,6 +138,8 @@ def trigger_prognosis_inference(
     rna = db.query(models.RnaData).filter(models.RnaData.patient_id == real_id).first()
     if not rna:
         print(f"[Warning] No RNA-seq data found cho bệnh nhân {patient_id}. The model will automatically skip it using Attention Mask.")
+
+    _ensure_celery_worker_available()
 
     # Loại bỏ cơ chế kiểm tra tác vụ cũ vì nếu Worker sập, DB sẽ lưu trạng thái 'processing' mãi mãi.
     # Luôn luôn tạo một task mới khi người dùng yêu cầu để tránh bị kẹt (deadlock).
@@ -147,6 +173,22 @@ def get_task_status(
     task = db.query(models.InferenceTask).filter(models.InferenceTask.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail=f"Không tìm thấy tác vụ id={task_id}")
+
+    if task.task_type == "mri_pipeline":
+        image = crud.get_image_for_user(db, int(task.target_id), current_user)
+        if not image:
+            raise HTTPException(status_code=404, detail=f"Task id={task_id} not found")
+    elif task.task_type == "prognosis":
+        patient = (
+            db.query(models.Patient)
+            .filter(
+                models.Patient.id == int(task.target_id),
+                models.Patient.owner_user_id == crud.current_user_id(current_user),
+            )
+            .first()
+        )
+        if not patient:
+            raise HTTPException(status_code=404, detail=f"Task id={task_id} not found")
 
     progress_percent = None
     progress_status = None

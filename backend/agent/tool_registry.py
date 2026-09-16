@@ -38,10 +38,12 @@ def get_tool_catalog() -> list[dict[str, Any]]:
     ]
 
 
-def get_notifications(db: Session) -> dict[str, Any]:
+def get_notifications(db: Session, owner_user_id: int | None = None) -> dict[str, Any]:
     low_confidence = (
         db.query(models.AnalysisResult)
+        .join(models.Patient, models.AnalysisResult.patient_id == models.Patient.id)
         .filter(
+            models.Patient.owner_user_id == owner_user_id,
             models.AnalysisResult.no_tumor_detected.is_(False),
             models.AnalysisResult.classification_confidence.isnot(None),
             models.AnalysisResult.classification_confidence < 0.95,
@@ -50,7 +52,9 @@ def get_notifications(db: Session) -> dict[str, Any]:
     )
     stale_risk = (
         db.query(models.AnalysisResult)
+        .join(models.Patient, models.AnalysisResult.patient_id == models.Patient.id)
         .filter(
+            models.Patient.owner_user_id == owner_user_id,
             models.AnalysisResult.no_tumor_detected.is_(True),
             models.AnalysisResult.risk_score.isnot(None),
         )
@@ -65,13 +69,18 @@ def get_notifications(db: Session) -> dict[str, Any]:
     return {"items": items}
 
 
-def execute_registered_tool(db: Session, name: str, args: dict[str, Any]) -> Any:
+def execute_registered_tool(
+    db: Session,
+    name: str,
+    args: dict[str, Any],
+    owner_user_id: int | None = None,
+) -> Any:
     if name == "get_patient_profile":
-        return get_patient_profile(db, args.get("patient_id"))
+        return get_patient_profile(db, args.get("patient_id"), owner_user_id=owner_user_id)
     if name == "get_patient_diagnosis_history":
-        return get_patient_diagnosis_history(db, args.get("patient_id"))
+        return get_patient_diagnosis_history(db, args.get("patient_id"), owner_user_id=owner_user_id)
     if name == "get_image_analysis":
-        return get_image_analysis(db, args.get("image_id"))
+        return get_image_analysis(db, args.get("image_id"), owner_user_id=owner_user_id)
     if name == "get_notifications":
-        return get_notifications(db)
+        return get_notifications(db, owner_user_id=owner_user_id)
     raise ValueError(f"Tool không được hỗ trợ: {name}")

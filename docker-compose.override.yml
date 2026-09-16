@@ -1,0 +1,8 @@
+services:
+  db:
+    volumes:
+      - neuroproject-tunnel_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  neuroproject-tunnel_postgres_data:
+    external: true

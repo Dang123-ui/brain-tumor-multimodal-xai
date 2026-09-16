@@ -6,28 +6,62 @@ import { apiService } from "@/lib/api";
 import { ArrowLeft, Upload, Loader2, Activity } from "lucide-react";
 import MriResultCard from "@/components/ai/MriResultCard";
 
+type ResultPayload = {
+  image_id?: number | string;
+  patient_id?: number | string;
+  [key: string]: unknown;
+};
+
+type PatientInfo = {
+  id?: number | string | null;
+  external_id?: string | number | null;
+  name?: string | null;
+  age?: number | string | null;
+  gender?: string | null;
+};
+
+function errorMessage(error: unknown, fallback: string) {
+  const candidate = error as { response?: { data?: { detail?: string } }; message?: string };
+  return candidate.response?.data?.detail || candidate.message || fallback;
+}
+
 export default function ResultsPage({ params }: { params: Promise<{ patientId: string }> }) {
   const { patientId } = use(params);
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<ResultPayload | null>(null);
   const [error, setError] = useState("");
-  const [patientInfo, setPatientInfo] = useState<any>(null);
+  const [patientInfo, setPatientInfo] = useState<PatientInfo | null>(null);
+  const [openReviewForm, setOpenReviewForm] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch patient info
-        const patientRes = await apiService.patients.getById(patientId);
-        setPatientInfo(patientRes.data?.patient);
+        const searchParams = new URLSearchParams(window.location.search);
+        const imageId = searchParams.get("imageId");
+        setOpenReviewForm(searchParams.get("review") === "1");
+        if (imageId) {
+          const res = await apiService.analysis.getImageResult(imageId);
+          setResult(res.data as ResultPayload);
+          try {
+            const patientRes = await apiService.patients.getById(patientId);
+            setPatientInfo(patientRes.data?.patient as PatientInfo);
+          } catch {
+            setPatientInfo({
+              id: res.data?.patient_id || patientId,
+              external_id: patientId,
+            });
+          }
+          return;
+        }
 
-        const imageId = new URLSearchParams(window.location.search).get("imageId");
-        const res = imageId
-          ? await apiService.analysis.getImageResult(imageId)
-          : await apiService.analysis.getFullResult(patientId);
-        setResult(res.data);
-      } catch (err: any) {
-        setError(err.response?.data?.detail || err.message || "Không thể tải kết quả.");
+        const patientRes = await apiService.patients.getById(patientId);
+        setPatientInfo(patientRes.data?.patient as PatientInfo);
+
+        const res = await apiService.analysis.getFullResult(patientId);
+        setResult(res.data as ResultPayload);
+      } catch (err) {
+        setError(errorMessage(err, "Không thể tải kết quả."));
       } finally {
         setLoading(false);
       }
@@ -48,8 +82,8 @@ export default function ResultsPage({ params }: { params: Promise<{ patientId: s
       setTimeout(() => {
         window.URL.revokeObjectURL(url);
       }, 60000);
-    } catch (err: any) {
-      alert(err.response?.data?.detail || "Lỗi tải báo cáo.");
+    } catch (err) {
+      alert(errorMessage(err, "Lỗi tải báo cáo."));
     }
   };
 
@@ -78,13 +112,17 @@ export default function ResultsPage({ params }: { params: Promise<{ patientId: s
             <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />
             Quay lại Upload
           </button>
-          <span className="text-slate-700">|</span>
-          <button
-            onClick={() => router.push(`/patients/${patientId}`)}
-            className="text-slate-400 hover:text-teal-400 transition-colors text-sm"
-          >
-            Xem hồ sơ bệnh nhân
-          </button>
+          {patientInfo?.name && (
+            <>
+              <span className="text-slate-700">|</span>
+              <button
+                onClick={() => router.push(`/patients/${patientId}`)}
+                className="text-slate-400 hover:text-teal-400 transition-colors text-sm"
+              >
+                Xem hồ sơ bệnh nhân
+              </button>
+            </>
+          )}
         </div>
         <button
           onClick={() => router.push(uploadHref)}
@@ -131,6 +169,7 @@ export default function ResultsPage({ params }: { params: Promise<{ patientId: s
           result={result}
           onDownload={result.image_id ? handleDownloadReport : undefined}
           onExtraAction={() => router.push(uploadHref)}
+          openReviewForm={openReviewForm}
           extraActionLabel="Tải dữ liệu mới"
         />
       )}

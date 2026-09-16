@@ -20,8 +20,8 @@ export default function SettingsPage() {
   ];
 
   return (
-    <div className="flex flex-col h-full space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="flex h-full flex-col space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
            <h1 className="text-2xl font-bold text-slate-100 mb-2">Cài đặt Hệ thống</h1>
            <p className="text-sm text-slate-400">Thiết lập tham số AI, cấu hình Server và tùy biến giao diện.</p>
@@ -37,7 +37,7 @@ export default function SettingsPage() {
         </button>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-10rem)]">
+      <div className="flex min-h-[calc(100vh-10rem)] flex-col gap-6 md:h-[calc(100vh-10rem)] md:flex-row">
         
         {/* Left Sidebar Tabs */}
         <div className="w-full md:w-64 shrink-0 flex flex-col gap-2">
@@ -57,7 +57,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Right Settings Content Area */}
-        <div className="flex-1 rounded-2xl border border-slate-800 bg-slate-900/50 p-8 overflow-y-auto custom-scrollbar shadow-lg">
+        <div className="min-w-0 flex-1 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900/50 p-4 shadow-lg sm:p-6 lg:p-8 custom-scrollbar">
            
            {activeTab === "models" && (
              <div className="space-y-8 animate-in fade-in duration-300">

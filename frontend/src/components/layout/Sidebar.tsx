@@ -10,9 +10,12 @@ import {
   FileText, 
   Settings,
   BrainCircuit,
-  Activity
+  MessagesSquare,
+  LogOut,
+  X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 
 const navItems = [
   { name: "Tổng quan", href: "/", icon: LayoutDashboard },
@@ -20,29 +23,62 @@ const navItems = [
   { name: "Tải lên DICOM/WSI", href: "/upload", icon: Upload },
   { name: "Lịch sử Chẩn đoán", href: "/history", icon: History },
   { name: "Báo cáo AI", href: "/reports", icon: FileText },
+  { name: "NeuroBoard", href: "/neuroboard", icon: MessagesSquare },
 ];
 
-export function Sidebar() {
+type SidebarProps = {
+  open: boolean;
+  onClose: () => void;
+};
+
+export function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const { logout } = useAuth();
 
   return (
-    <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col bg-slate-900 border-r border-slate-800 text-slate-100">
+    <>
+      {open && (
+        <button
+          type="button"
+          aria-label="Đóng điều hướng"
+          className="fixed inset-0 z-40 bg-slate-950/55 backdrop-blur-sm"
+          onClick={onClose}
+        />
+      )}
+      <aside
+        className={cn(
+          "fixed left-0 top-0 z-50 flex h-dvh w-[min(20rem,calc(100vw-2rem))] flex-col border-r border-slate-800 bg-slate-900 text-slate-100 shadow-2xl shadow-slate-950/40 transition-transform duration-200 ease-out sm:w-80",
+          open ? "translate-x-0" : "-translate-x-full",
+        )}
+        aria-hidden={!open}
+      >
       {/* App Logo */}
-      <div className="flex items-center gap-3 px-6 py-6">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-600">
-          <BrainCircuit className="h-5 w-5 text-white" />
+      <div className="flex items-center justify-between gap-3 px-5 py-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-600">
+            <BrainCircuit className="h-5 w-5 text-white" />
+          </div>
+          <span className="truncate text-lg font-semibold tracking-tight">NeuroDiagnosis AI</span>
         </div>
-        <span className="text-lg font-semibold tracking-tight">NeuroDiagnosis AI</span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
+          title="Đóng điều hướng"
+        >
+          <X className="h-5 w-5" />
+        </button>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 px-4 py-4">
+      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-4 py-4">
         {navItems.map((item) => {
           const isActive = pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href));
           return (
             <Link
               key={item.href}
               href={item.href}
+              onClick={onClose}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                 isActive 
@@ -61,6 +97,7 @@ export function Sidebar() {
       <div className="p-4 space-y-2">
         <Link
           href="/settings"
+          onClick={onClose}
           className={cn(
             "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors mb-4",
             pathname?.startsWith("/settings")
@@ -72,6 +109,18 @@ export function Sidebar() {
           Cài đặt
         </Link>
         
+        <button
+          type="button"
+          onClick={() => {
+            onClose();
+            logout();
+          }}
+          className="mb-4 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200"
+        >
+          <LogOut className="h-5 w-5" />
+          Đăng xuất
+        </button>
+
         {/* System Status Panel */}
         <div className="rounded-xl border border-slate-800 bg-slate-800/50 p-4">
           <div className="flex items-center justify-between mb-2">
@@ -85,5 +134,6 @@ export function Sidebar() {
         </div>
       </div>
     </aside>
+    </>
   );
 }

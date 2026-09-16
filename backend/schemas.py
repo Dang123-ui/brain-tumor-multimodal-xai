@@ -140,6 +140,15 @@ class ImageAIResultResponse(BaseModel):
     bbox_confidence: Optional[float] = None
     tumor_label: Optional[str] = None
     classification_confidence: Optional[float] = None
+    ai_tumor_label: Optional[str] = None
+    ai_confidence: Optional[float] = None
+    final_tumor_label: Optional[str] = None
+    expert_tumor_label: Optional[str] = None
+    expert_comment: Optional[str] = None
+    review_required: bool = False
+    review_status: str = "not_available"
+    review_action: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
     class_probabilities: Optional[List[float]] = None
     bbox_overlay_data_url: Optional[str] = None
     mask_data_url: Optional[str] = None
@@ -343,6 +352,8 @@ class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
     role: str
+    username: str
+    user_id: int
 
 
 class TokenData(BaseModel):

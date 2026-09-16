@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey, Text, JSON, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey, Text, JSON, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
 from database import Base
 import datetime
@@ -8,11 +8,13 @@ class Patient(Base):
     __tablename__ = "patients"
 
     id = Column(Integer, primary_key=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=True)
     name = Column(String, nullable=True)
     patient_external_id = Column(String, unique=True, index=True, nullable=True)
     age = Column(Integer, nullable=True)
     gender = Column(String, nullable=True)
 
+    owner_user = relationship("User", back_populates="patients")
     images = relationship("Image", back_populates="owner")
     rna_data = relationship("RnaData", back_populates="patient")
     clinical_data = relationship("ClinicalData", back_populates="patient", uselist=False)
@@ -245,6 +247,7 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     access_logs = relationship("AccessLog", back_populates="user")
+    patients = relationship("Patient", back_populates="owner_user")
 
 
 class AccessLog(Base):
@@ -310,3 +313,163 @@ class AgentAuditLog(Base):
     after_value = Column(JSON, nullable=True)
     metadata_json = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
+
+
+# --- NEUROBOARD ---
+
+class NeuroPost(Base):
+    """A normal social post or an anonymized clinical case post."""
+    __tablename__ = "neuro_posts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    author_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    post_type = Column(String, nullable=False, index=True)  # normal | clinical_case
+    content = Column(Text, nullable=True)
+    image_id = Column(Integer, ForeignKey("images.id"), nullable=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=True, index=True)
+    anonymous_case_code = Column(String, unique=True, nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False, index=True)
+    updated_at = Column(
+        DateTime,
+        default=datetime.datetime.utcnow,
+        onupdate=datetime.datetime.utcnow,
+        nullable=False,
+    )
+    deleted_at = Column(DateTime, nullable=True, index=True)
+
+    author = relationship("User")
+    image = relationship("Image")
+    patient = relationship("Patient")
+    attachments = relationship(
+        "NeuroPostAttachment",
+        back_populates="post",
+        cascade="all, delete-orphan",
+        order_by="NeuroPostAttachment.sort_order",
+    )
+
+
+class NeuroPostAttachment(Base):
+    __tablename__ = "neuro_post_attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey("neuro_posts.id", ondelete="CASCADE"), nullable=False, index=True)
+    object_path = Column(String, nullable=False)
+    content_type = Column(String, nullable=False)
+    original_name = Column(String, nullable=True)
+    sort_order = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    post = relationship("NeuroPost", back_populates="attachments")
+
+
+class NeuroPostReaction(Base):
+    __tablename__ = "neuro_post_reactions"
+    __table_args__ = (UniqueConstraint("post_id", "user_id", name="uq_neuro_reaction_post_user"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey("neuro_posts.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    reaction_type = Column(String, default="like", nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+
+class NeuroPostComment(Base):
+    __tablename__ = "neuro_post_comments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey("neuro_posts.id", ondelete="CASCADE"), nullable=False, index=True)
+    author_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    parent_id = Column(Integer, ForeignKey("neuro_post_comments.id", ondelete="CASCADE"), nullable=True, index=True)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False, index=True)
+    updated_at = Column(
+        DateTime,
+        default=datetime.datetime.utcnow,
+        onupdate=datetime.datetime.utcnow,
+        nullable=False,
+    )
+    deleted_at = Column(DateTime, nullable=True, index=True)
+
+    author = relationship("User")
+
+
+class NeuroPostSave(Base):
+    __tablename__ = "neuro_post_saves"
+    __table_args__ = (UniqueConstraint("post_id", "user_id", name="uq_neuro_save_post_user"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey("neuro_posts.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+
+class NeuroRoiComment(Base):
+    __tablename__ = "neuro_roi_comments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey("neuro_posts.id", ondelete="CASCADE"), nullable=False, index=True)
+    author_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    reply_to_id = Column(Integer, ForeignKey("neuro_roi_comments.id", ondelete="CASCADE"), nullable=True, index=True)
+    visual_label = Column(String, nullable=False)
+    x = Column(Float, nullable=False)
+    y = Column(Float, nullable=False)
+    width = Column(Float, nullable=False)
+    height = Column(Float, nullable=False)
+    content = Column(Text, nullable=False)
+    is_ai = Column(Boolean, default=False, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False, index=True)
+    deleted_at = Column(DateTime, nullable=True, index=True)
+
+    author = relationship("User")
+
+
+class NeuroConversation(Base):
+    __tablename__ = "neuro_conversations"
+    __table_args__ = (UniqueConstraint("user_1_id", "user_2_id", name="uq_neuro_conversation_pair"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_1_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_2_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False, index=True)
+    updated_at = Column(
+        DateTime,
+        default=datetime.datetime.utcnow,
+        onupdate=datetime.datetime.utcnow,
+        nullable=False,
+    )
+
+
+class NeuroMessage(Base):
+    __tablename__ = "neuro_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("neuro_conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    sender_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    reply_to_id = Column(Integer, ForeignKey("neuro_messages.id", ondelete="SET NULL"), nullable=True, index=True)
+    message_type = Column(String, default="text", nullable=False, index=True)
+    content = Column(Text, nullable=True)
+    image_path = Column(String, nullable=True)
+    image_content_type = Column(String, nullable=True)
+    image_original_name = Column(String, nullable=True)
+    case_image_id = Column(Integer, ForeignKey("images.id"), nullable=True, index=True)
+    second_opinion_request_id = Column(Integer, ForeignKey("neuro_second_opinion_requests.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False, index=True)
+    read_at = Column(DateTime, nullable=True, index=True)
+
+    sender = relationship("User")
+
+
+class NeuroSecondOpinionRequest(Base):
+    __tablename__ = "neuro_second_opinion_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    case_image_id = Column(Integer, ForeignKey("images.id"), nullable=False, index=True)
+    requester_doctor_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    reviewer_doctor_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    conversation_id = Column(Integer, ForeignKey("neuro_conversations.id"), nullable=False, index=True)
+    message_id = Column(Integer, ForeignKey("neuro_messages.id"), nullable=True, index=True)
+    request_message = Column(Text, nullable=True)
+    status = Column(String, default="Pending", nullable=False, index=True)
+    opinion = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False, index=True)
+    completed_at = Column(DateTime, nullable=True, index=True)

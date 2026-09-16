@@ -77,6 +77,7 @@ type Props = {
   onDownload?: () => void;
   onExtraAction?: () => void;
   extraActionLabel?: string;
+  openReviewForm?: boolean;
   compact?: boolean;
 };
 
@@ -108,6 +109,7 @@ export default function MriResultCard({
   onDownload,
   onExtraAction,
   extraActionLabel,
+  openReviewForm = false,
   compact = false,
 }: Props) {
   const [previewImage, setPreviewImage] = useState<ImagePreviewState | null>(null);
@@ -123,7 +125,7 @@ export default function MriResultCard({
   const [expertComment, setExpertComment] = useState(result?.expert_comment || "");
   const [reviewSaving, setReviewSaving] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
-  const [showReviewForm, setShowReviewForm] = useState(result?.review_status === "needs_review");
+  const [showReviewForm, setShowReviewForm] = useState(openReviewForm || result?.review_status === "needs_review");
   const [reviewState, setReviewState] = useState({
     final_tumor_label: result?.final_tumor_label,
     expert_tumor_label: result?.expert_tumor_label,
@@ -198,7 +200,7 @@ export default function MriResultCard({
       review_status: result?.review_status,
       review_action: result?.review_action,
     });
-    setShowReviewForm(result?.review_status === "needs_review");
+    setShowReviewForm(openReviewForm || result?.review_status === "needs_review");
   }, [
     result?.image_id,
     result?.final_tumor_label,
@@ -208,6 +210,7 @@ export default function MriResultCard({
     result?.review_status,
     result?.review_action,
     result?.tumor_label,
+    openReviewForm,
   ]);
 
   const submitClassificationReview = async () => {
@@ -463,52 +466,52 @@ export default function MriResultCard({
 
               {result?.tumor_label && !noTumorDetected && (shouldWarnClassificationReview || hasCompletedClassificationReview || showReviewForm) && (
                 <div
-                  className={`rounded-xl border p-5 ${
+                  className={`rounded-xl border p-5 !text-[#0F172A] shadow-sm ${
                     shouldWarnClassificationReview
-                      ? "border-red-500/30 bg-red-500/10"
+                      ? "border-red-200 bg-red-50"
                       : hasCompletedClassificationReview
-                        ? "border-emerald-500/30 bg-emerald-500/10"
-                        : "border-slate-800 bg-slate-950/50"
+                        ? "border-emerald-200 bg-[#ECFDF5]"
+                        : "border-slate-200 bg-white"
                   }`}
                 >
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div>
-                      <div className="text-[11px] uppercase tracking-widest text-slate-500">Review phân loại</div>
-                      <div className="mt-2 text-sm text-slate-300">
-                        AI ban đầu: <span className="font-semibold text-white">{result.ai_tumor_label || result.tumor_label}</span>
+                      <div className="text-[11px] font-semibold uppercase tracking-widest !text-[#475569]">Review phân loại</div>
+                      <div className="mt-2 text-sm !text-[#1E293B]">
+                        AI ban đầu: <span className="font-semibold !text-[#020617]">{result.ai_tumor_label || result.tumor_label}</span>
                         {" "}({formatConfidence(classificationConfidence)})
                       </div>
-                      <div className="mt-1 text-sm text-slate-300">
-                        Kết quả cuối: <span className="font-semibold text-white">{reviewState.final_tumor_label || result.final_tumor_label || result.tumor_label}</span>
+                      <div className="mt-1 text-sm !text-[#1E293B]">
+                        Kết quả cuối: <span className="font-semibold !text-[#020617]">{reviewState.final_tumor_label || result.final_tumor_label || result.tumor_label}</span>
                       </div>
                       {shouldWarnClassificationReview && (
-                        <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-200">
+                        <div className="mt-3 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium !text-[#B91C1C]">
                           Kết quả của model không chắc chắn, cần chuyên gia xem xét lại.
                         </div>
                       )}
                       {hasCompletedClassificationReview && isLowClassificationConfidence && (
-                        <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-200">
+                        <div className="mt-3 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-medium !text-[#065F46]">
                           Mặc dù độ tin cậy &lt; 0.95 nhưng đã được chuyên gia xác nhận.
                         </div>
                       )}
                       {reviewState.review_status === "corrected" && (
-                        <div className="mt-2 text-sm text-emerald-200">
+                        <div className="mt-2 text-sm !text-[#065F46]">
                           Chuyên gia đã chỉnh nhãn sang <span className="font-semibold">{reviewState.final_tumor_label}</span>.
                         </div>
                       )}
                       {reviewState.expert_comment && (
-                        <div className="mt-2 text-sm text-slate-400">Ghi chú chuyên gia: {reviewState.expert_comment}</div>
+                        <div className="mt-2 text-sm !text-[#1E293B]">Ghi chú chuyên gia: {reviewState.expert_comment}</div>
                       )}
                     </div>
                     <div className="flex flex-col items-start gap-2 lg:items-end">
-                      <span className="w-fit rounded-full border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200">
+                      <span className="w-fit rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold !text-[#1E293B]">
                         {reviewStatusText(reviewState.review_status)}
                       </span>
                       {!shouldShowClassificationReviewForm && (
                         <button
                           type="button"
                           onClick={() => setShowReviewForm(true)}
-                          className="rounded-xl border border-teal-500/30 px-4 py-2 text-sm font-semibold text-teal-200 hover:bg-teal-500/10"
+                          className="rounded-xl border border-teal-300 bg-white px-4 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50"
                         >
                           {hasCompletedClassificationReview ? "Xác nhận lại" : "Xác nhận phân loại"}
                         </button>
@@ -521,7 +524,7 @@ export default function MriResultCard({
                       <select
                         value={expertLabel}
                         onChange={(event) => setExpertLabel(event.target.value)}
-                        className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-teal-500"
+                        className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
                       >
                         <option value="Glioma">Glioma</option>
                         <option value="Meningioma">Meningioma</option>
@@ -531,7 +534,7 @@ export default function MriResultCard({
                         value={expertComment}
                         onChange={(event) => setExpertComment(event.target.value)}
                         placeholder="Ghi chú chuyên gia..."
-                        className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-teal-500"
+                        className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 placeholder:text-slate-500 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
                       />
                       <button
                         onClick={submitClassificationReview}
@@ -542,7 +545,7 @@ export default function MriResultCard({
                       </button>
                     </div>
                   )}
-                  {reviewError && <div className="mt-3 text-sm text-red-300">{reviewError}</div>}
+                  {reviewError && <div className="mt-3 text-sm font-medium text-red-700">{reviewError}</div>}
                 </div>
               )}
 

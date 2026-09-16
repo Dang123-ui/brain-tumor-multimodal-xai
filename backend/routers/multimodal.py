@@ -86,7 +86,7 @@ async def upload_rna(
                    f"Các ID tìm thấy trong file: {file_patient_ids[:5]}",
         )
 
-    db_patient = crud.get_patient_by_id_or_external(db, patient_id)
+    db_patient = crud.get_patient_for_user(db, patient_id, current_user)
     if not db_patient:
         raise HTTPException(
             status_code=404,
@@ -152,7 +152,7 @@ def update_clinical_data(
     current_user: dict = Depends(get_current_user),
 ):
     # Xác minh bệnh nhân tồn tại (Hỗ trợ cả ID và External ID)
-    patient = crud.get_patient_by_id_or_external(db, patient_id)
+    patient = crud.get_patient_for_user(db, patient_id, current_user)
     if not patient:
         raise HTTPException(status_code=404, detail=f"Không tìm thấy bệnh nhân '{patient_id}'")
 

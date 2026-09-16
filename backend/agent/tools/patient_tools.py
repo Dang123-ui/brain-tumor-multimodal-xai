@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 import crud
 import models
+from review_utils import classification_review_state
 
 
 def _stored_data_url(path: str | None) -> str | None:
@@ -94,10 +95,17 @@ def _fallback_segmentation_overlays(
         return None, None
 
 
-def resolve_patient(db: Session, patient_id: Optional[str]) -> Optional[models.Patient]:
+def resolve_patient(
+    db: Session,
+    patient_id: Optional[str],
+    owner_user_id: int | None = None,
+) -> Optional[models.Patient]:
     if not patient_id:
         return None
-    return crud.get_patient_by_id_or_external(db, patient_id)
+    patient = crud.get_patient_by_id_or_external(db, patient_id)
+    if owner_user_id is not None and patient and patient.owner_user_id != owner_user_id:
+        return None
+    return patient
 
 
 def serialize_patient(patient: Optional[models.Patient]) -> Optional[dict[str, Any]]:
@@ -112,8 +120,12 @@ def serialize_patient(patient: Optional[models.Patient]) -> Optional[dict[str, A
     }
 
 
-def get_patient_profile(db: Session, patient_id: Optional[str]) -> dict[str, Any]:
-    patient = resolve_patient(db, patient_id)
+def get_patient_profile(
+    db: Session,
+    patient_id: Optional[str],
+    owner_user_id: int | None = None,
+) -> dict[str, Any]:
+    patient = resolve_patient(db, patient_id, owner_user_id)
     if not patient:
         return {"found": False, "patient": None}
 
@@ -171,6 +183,18 @@ def serialize_analysis_with_visuals(
     if not item or not analysis:
         return item
 
+    ai_label = None if analysis.no_tumor_detected else analysis.tumor_label
+    ai_confidence = None if analysis.no_tumor_detected else analysis.classification_confidence
+    review_state = classification_review_state(db, analysis.image_id, ai_label, ai_confidence)
+    item["ai_tumor_label"] = review_state["ai_tumor_label"]
+    item["final_tumor_label"] = review_state["final_tumor_label"]
+    item["expert_tumor_label"] = review_state["expert_tumor_label"]
+    item["expert_comment"] = review_state["expert_comment"]
+    item["review_required"] = review_state["review_required"]
+    item["review_status"] = review_state["review_status"]
+    item["review_action"] = review_state["review_action"]
+    item["reviewed_at"] = review_state["reviewed_at"].isoformat() if review_state["reviewed_at"] else None
+
     image = db.query(models.Image).filter(models.Image.id == analysis.image_id).first()
     mri_task = _latest_task(db, "mri_pipeline", analysis.image_id)
     prognosis_task = _matching_prognosis_task(db, analysis)
@@ -225,8 +249,12 @@ def serialize_analysis_with_visuals(
     return item
 
 
-def get_patient_diagnosis_history(db: Session, patient_id: Optional[str]) -> dict[str, Any]:
-    patient = resolve_patient(db, patient_id)
+def get_patient_diagnosis_history(
+    db: Session,
+    patient_id: Optional[str],
+    owner_user_id: int | None = None,
+) -> dict[str, Any]:
+    patient = resolve_patient(db, patient_id, owner_user_id)
     if not patient:
         return {"found": False, "patient": None, "items": []}
 

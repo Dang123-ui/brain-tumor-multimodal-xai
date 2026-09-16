@@ -268,10 +268,10 @@ export default function PatientsPage() {
   };
 
   return (
-    <div className="flex flex-col h-full space-y-6">
+    <div className="flex h-full min-w-0 flex-col space-y-6">
       
       {/* Search and Action Bar */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative w-full max-w-xl">
           <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
           <input
@@ -283,11 +283,11 @@ export default function PatientsPage() {
           />
         </div>
         
-        <div className="flex gap-3">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:gap-3">
           <button 
             onClick={handleExportData}
             disabled={exporting}
-            className="flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-300 border border-slate-700 hover:bg-slate-700 transition-all active:scale-95 disabled:opacity-50"
+            className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-300 transition-all hover:bg-slate-700 active:scale-95 disabled:opacity-50"
           >
             {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             Xuất dữ liệu đánh giá (CSV)
@@ -295,7 +295,7 @@ export default function PatientsPage() {
           
           <button 
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-teal-500/20 hover:bg-teal-500 transition-all active:scale-95"
+            className="flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-teal-500/20 transition-all hover:bg-teal-500 active:scale-95"
           >
             <UserPlus className="h-4 w-4" />
             Thêm bệnh nhân mới
@@ -308,7 +308,7 @@ export default function PatientsPage() {
         
         {/* Table Container */}
         <div className="flex-1 overflow-auto custom-scrollbar">
-          <table className="w-full text-left text-sm text-slate-400">
+          <table className="w-full min-w-[920px] text-left text-sm text-slate-400">
             <thead className="bg-slate-950/40 text-xs uppercase font-semibold text-slate-500 sticky top-0 z-10 shadow-sm border-b border-slate-800">
               <tr>
                 <th className="px-6 py-4">Mã BN</th>
@@ -379,11 +379,11 @@ export default function PatientsPage() {
         </div>
 
         {/* Pagination Footer */}
-        <div className="flex items-center justify-between border-t border-slate-800 bg-slate-950/30 px-6 py-3">
+        <div className="flex flex-col gap-3 border-t border-slate-800 bg-slate-950/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <span className="text-sm text-slate-500">
             Hiển thị <span className="font-semibold text-slate-300">{totalItems > 0 ? startIndex + 1 : 0}</span> đến <span className="font-semibold text-slate-300">{endIndex}</span> trong <span className="font-semibold text-slate-300">{totalItems}</span> bệnh nhân
           </span>
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
             <button 
               onClick={() => handlePageChange(currentPage - 1)}
               disabled={currentPage === 1}

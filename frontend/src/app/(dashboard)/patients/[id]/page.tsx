@@ -299,7 +299,7 @@ export default function PatientDetailsPage({ params }: { params: Promise<{ id: s
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-600 dark:text-slate-400">
+              <table className="w-full min-w-[920px] text-left text-sm text-slate-600 dark:text-slate-400">
                 <thead className="bg-slate-950/20 text-xs font-semibold text-slate-400 border-b border-slate-800 uppercase tracking-tight">
                   <tr>
                     <th className="px-6 py-4">Mô thức chụp</th>

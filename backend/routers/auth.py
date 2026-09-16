@@ -38,7 +38,7 @@ def login(
             detail="Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ quản trị viên.",
         )
 
-    token_payload = {"sub": str(user.id), "role": user.role}
+    token_payload = {"sub": str(user.id), "role": user.role, "username": user.username}
     access_token = create_access_token(data=token_payload)
 
     # Ghi access log
@@ -52,4 +52,10 @@ def login(
     db.add(log)
     db.commit()
 
-    return schemas.Token(access_token=access_token, token_type="bearer", role=user.role)
+    return schemas.Token(
+        access_token=access_token,
+        token_type="bearer",
+        role=user.role,
+        username=user.username,
+        user_id=user.id,
+    )

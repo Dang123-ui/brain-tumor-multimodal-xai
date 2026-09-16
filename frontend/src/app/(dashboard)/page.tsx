@@ -24,7 +24,7 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-6rem)]">
+      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
         <div className="animate-pulse flex flex-col items-center">
           <div className="h-12 w-12 rounded-full border-4 border-t-teal-500 border-slate-700 animate-spin mb-4" />
           <p className="text-slate-400">Đang tải thống kê dữ liệu...</p>
@@ -35,7 +35,7 @@ export default function DashboardPage() {
 
   if (!stats) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
         <p className="text-red-400">Không thể tải dữ liệu thống kê.</p>
       </div>
     );
@@ -66,7 +66,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6 h-[calc(100vh-6rem)] overflow-y-auto custom-scrollbar pr-2 pb-6">
+    <div className="flex min-h-[calc(100vh-6rem)] min-w-0 flex-col gap-6 overflow-y-auto pb-6 pr-0 sm:pr-2 custom-scrollbar">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-100">Tổng quan Nghiên cứu</h1>

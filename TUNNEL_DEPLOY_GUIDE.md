@@ -57,7 +57,7 @@ curl http://localhost:8000/health
 Mo Cloudflare Tunnel:
 
 ```powershell
-cloudflared tunnel --url http://localhost:8000
+cloudflared tunnel --protocol http2 --url http://localhost:8000
 ```
 
 Copy URL dang:
@@ -71,6 +71,16 @@ Test tunnel:
 ```powershell
 curl https://abc-def-xyz.trycloudflare.com/health
 ```
+
+Gan URL nay vao Vercel:
+
+```text
+Project Settings -> Environment Variables
+NEXT_PUBLIC_API_URL=https://abc-def-xyz.trycloudflare.com
+```
+
+Sau khi sua `NEXT_PUBLIC_API_URL`, redeploy frontend tren Vercel. Vercel khong doc
+`frontend/.env.local`; file do chi dung khi chay local.
 
 ## 3. Chay local
 
@@ -101,7 +111,7 @@ Muon deploy:
 ```powershell
 docker compose stop
 docker compose -f docker-compose.tunnel.yml --env-file .env.tunnel up -d
-cloudflared tunnel --url http://localhost:8000
+cloudflared tunnel --protocol http2 --url http://localhost:8000
 ```
 
 Muon local:
@@ -143,3 +153,12 @@ docker compose down -v
 Neu khong muon xoa volume database/MinIO.
 
 cloudflared tunnel --protocol http2 --url http://localhost:8000
+
+Luu y database:
+
+```text
+Local mac dinh:  docker-compose.yml + postgres volume local
+Deploy tunnel:   docker-compose.tunnel.yml + .env.tunnel + postgres_data rieng
+```
+
+Khong chay `docker compose down -v` neu muon giu database. Lenh do xoa volume.

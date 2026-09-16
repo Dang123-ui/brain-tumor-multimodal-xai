@@ -7,16 +7,21 @@ import crud
 
 import models
 from database import get_db
-from utils import minio_client, ensure_bucket_exists, prepare_mri_upload
+from utils import get_current_user, minio_client, ensure_bucket_exists, prepare_mri_upload
 
 router = APIRouter(prefix="/upload", tags=["Upload"])
 BUCKET_NAME = os.getenv("MINIO_BUCKET") or os.getenv("R2_BUCKET") or "medical-data"
 
 # API NHÁP: Tải lên file DICOM MRI (với ẩn danh tự động)
 @router.post("/mri/")
-async def upload_mri(patient_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_mri(
+    patient_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     # 1. Kiểm tra bệnh nhân có tồn tại trong DB không (Hỗ trợ cả ID và External ID)
-    patient = crud.get_patient_by_id_or_external(db, patient_id)
+    patient = crud.get_patient_for_user(db, patient_id, current_user)
     if not patient:
         raise HTTPException(status_code=404, detail=f"Không tìm thấy bệnh nhân '{patient_id}' trong hệ thống")
     
@@ -63,13 +68,14 @@ async def upload_mri_series(
     patient_id: str, 
     files: List[UploadFile] = File(None), 
     zip_file: UploadFile = File(None), 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Tải lên chuỗi ảnh MRI (nhiều file hoặc 1 file ZIP).
     Hệ thống sẽ lưu trữ toàn bộ ảnh vào một folder trên MinIO.
     """
-    patient = crud.get_patient_by_id_or_external(db, patient_id)
+    patient = crud.get_patient_for_user(db, patient_id, current_user)
     if not patient:
         raise HTTPException(status_code=404, detail=f"Không tìm thấy bệnh nhân '{patient_id}'")
     
@@ -152,7 +158,8 @@ async def upload_wsi_series(
     patient_id: str, 
     files: List[UploadFile] = File(None), 
     zip_file: UploadFile = File(None), 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Tải lên chuỗi ảnh WSI (nhiều tiles hoặc 1 file ZIP).
@@ -162,7 +169,7 @@ async def upload_wsi_series(
     import zipfile
     import io
     
-    patient = crud.get_patient_by_id_or_external(db, patient_id)
+    patient = crud.get_patient_for_user(db, patient_id, current_user)
     if not patient:
         raise HTTPException(status_code=404, detail=f"Không tìm thấy bệnh nhân '{patient_id}'")
     
@@ -239,9 +246,14 @@ async def upload_wsi_series(
 
 # API NHÁP: Tải lên WSI (Whole Slide Image) - File rất lớn, cần cơ chế streaming để tránh treo máy chủ
 @router.post("/wsi/")
-async def upload_wsi(patient_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_wsi(
+    patient_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     # 1. Kiểm tra bệnh nhân có tồn tại trong hệ thống không (Hỗ trợ cả ID và External ID)
-    patient = crud.get_patient_by_id_or_external(db, patient_id)
+    patient = crud.get_patient_for_user(db, patient_id, current_user)
     if not patient:
         raise HTTPException(status_code=404, detail=f"Không tìm thấy bệnh nhân '{patient_id}' trong hệ thống")
     

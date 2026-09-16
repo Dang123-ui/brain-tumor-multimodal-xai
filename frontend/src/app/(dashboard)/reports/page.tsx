@@ -28,7 +28,7 @@ export default function ReportPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-6rem)]">
+      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
         <div className="animate-spin h-10 w-10 border-4 border-t-teal-500 border-slate-700 rounded-full" />
       </div>
     );
@@ -52,33 +52,33 @@ export default function ReportPage() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-6rem)] relative overflow-hidden">
+    <div className="relative flex min-h-[calc(100vh-6rem)] min-w-0 flex-col overflow-hidden lg:h-[calc(100vh-6rem)]">
       
       {/* Top Action Bar */}
-      <div className="flex justify-between items-center bg-slate-900 border-b border-slate-800 p-4 shrink-0 shadow-lg relative z-10">
-        <h1 className="text-xl font-bold flex items-center gap-2">
+      <div className="relative z-10 flex shrink-0 flex-col gap-3 border-b border-slate-800 bg-slate-900 p-4 shadow-lg lg:flex-row lg:items-center lg:justify-between">
+        <h1 className="flex items-center gap-2 text-lg font-bold sm:text-xl">
           <FileText className="text-teal-500" />
           NeuroDiagnosis AI: Báo cáo Lâm sàng
         </h1>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           <button
             onClick={() => {
               navigator.clipboard.writeText(window.location.href);
               alert("Đã sao chép liên kết báo cáo vào clipboard!");
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-lg border border-slate-700 transition"
+            className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-300 transition hover:bg-slate-700 sm:px-4"
           >
             <Share2 className="h-4 w-4" /> Chia sẻ
           </button>
           <button
             onClick={() => window.print()}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-lg border border-slate-700 transition"
+            className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-300 transition hover:bg-slate-700 sm:px-4"
           >
              <Printer className="h-4 w-4" /> In Báo Cáo
           </button>
           <button
             onClick={() => alert("Chức năng xuất PDF đang được phát triển. Bạn có thể sử dụng In Báo Cáo > Save as PDF.")}
-            className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white font-bold rounded-lg shadow-lg shadow-teal-500/20 transition"
+            className="flex items-center gap-2 rounded-lg bg-teal-600 px-3 py-2 text-sm font-bold text-white shadow-lg shadow-teal-500/20 transition hover:bg-teal-500 sm:px-4"
           >
             <Download className="h-4 w-4" /> Xuất PDF
           </button>
@@ -86,7 +86,7 @@ export default function ReportPage() {
       </div>
 
       {/* Main Report Content - A4 Proportions with shadow styling inner container */}
-      <div className="flex-1 overflow-auto p-6 lg:p-10 flex justify-center bg-slate-950/40">
+      <div className="flex flex-1 justify-center overflow-auto bg-slate-950/40 p-3 sm:p-6 lg:p-10">
         
         <div className="w-full max-w-4xl bg-slate-950 rounded-xl shadow-2xl relative text-slate-200 flex flex-col h-fit mb-12 border border-slate-800">
            
@@ -94,7 +94,7 @@ export default function ReportPage() {
            <div className="h-4 w-full bg-teal-600 shrink-0"></div>
            
            {/* Report Inner - Printable Canvas */}
-           <div className="p-8 lg:p-12 flex flex-col flex-1">
+           <div className="flex flex-1 flex-col p-4 sm:p-8 lg:p-12">
              
              {/* Report Title & Logos */}
              <div className="flex justify-between items-start border-b-2 border-slate-800 pb-6 mb-8">

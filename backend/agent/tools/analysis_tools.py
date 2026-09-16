@@ -6,13 +6,21 @@ import models
 from agent.tools.patient_tools import serialize_analysis_with_visuals
 
 
-def get_image_analysis(db: Session, image_id: Optional[int]) -> dict[str, Any]:
+def get_image_analysis(
+    db: Session,
+    image_id: Optional[int],
+    owner_user_id: int | None = None,
+) -> dict[str, Any]:
     if not image_id:
         return {"found": False, "analysis": None}
 
     image = db.query(models.Image).filter(models.Image.id == image_id).first()
     if not image:
         return {"found": False, "analysis": None, "error": "image_not_found"}
+    if owner_user_id is not None:
+        patient = db.query(models.Patient).filter(models.Patient.id == image.patient_id).first()
+        if not patient or patient.owner_user_id != owner_user_id:
+            return {"found": False, "analysis": None, "error": "image_not_found"}
 
     analysis = (
         db.query(models.AnalysisResult)

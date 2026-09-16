@@ -499,7 +499,7 @@ export default function UploadPage() {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-6rem)]">
+    <div className="grid min-h-[calc(100vh-6rem)] grid-cols-1 gap-6 lg:h-[calc(100vh-6rem)] lg:grid-cols-3">
       <div className="lg:col-span-2 flex flex-col">
         <div className="flex items-center justify-between mb-6">
           <div>

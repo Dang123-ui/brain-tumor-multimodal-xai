@@ -221,7 +221,7 @@ def search_patients(
     current_user: dict = Depends(get_current_user),
 ):
     keyword = f"%{q.strip()}%"
-    query = db.query(models.Patient)
+    query = crud.patient_query_for_user(db, current_user)
     if q.strip():
         query = query.filter(
             or_(
@@ -357,7 +357,7 @@ async def quick_mri_diagnosis(
             },
         )
 
-    patient = crud.get_patient_by_id_or_external(db, patient_id)
+    patient = crud.get_patient_for_user(db, patient_id, current_user)
     if not patient:
         raise HTTPException(status_code=404, detail=f"Không tìm thấy bệnh nhân '{patient_id}'")
 
@@ -416,7 +416,7 @@ def quick_mri_summary(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    image = db.query(models.Image).filter(models.Image.id == image_id).first()
+    image = crud.get_image_for_user(db, image_id, current_user)
     if not image:
         raise HTTPException(status_code=404, detail="Không tìm thấy ảnh MRI")
 
@@ -454,9 +454,12 @@ def notifications(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    user_id = _current_user_id(current_user)
     low_confidence = (
         db.query(models.AnalysisResult)
+        .join(models.Patient, models.AnalysisResult.patient_id == models.Patient.id)
         .filter(
+            models.Patient.owner_user_id == user_id,
             models.AnalysisResult.no_tumor_detected.is_(False),
             models.AnalysisResult.classification_confidence.isnot(None),
             models.AnalysisResult.classification_confidence < 0.95,
@@ -465,7 +468,9 @@ def notifications(
     )
     stale_risk = (
         db.query(models.AnalysisResult)
+        .join(models.Patient, models.AnalysisResult.patient_id == models.Patient.id)
         .filter(
+            models.Patient.owner_user_id == user_id,
             models.AnalysisResult.no_tumor_detected.is_(True),
             models.AnalysisResult.risk_score.isnot(None),
         )

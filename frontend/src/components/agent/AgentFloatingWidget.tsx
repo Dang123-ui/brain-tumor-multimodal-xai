@@ -794,11 +794,11 @@ export function AgentFloatingWidget() {
       <button
         type="button"
         onClick={() => setMode("panel")}
-        className="fixed bottom-6 right-6 z-[70] flex h-20 w-20 items-center justify-center rounded-full border border-teal-300/70 bg-white shadow-2xl shadow-teal-900/30 transition hover:scale-105"
+        className="fixed bottom-4 right-4 z-[70] flex h-16 w-16 items-center justify-center rounded-full border border-teal-300/70 bg-white shadow-2xl shadow-teal-900/30 transition hover:scale-105 sm:bottom-6 sm:right-6 sm:h-20 sm:w-20"
         aria-label="Mở NeuroDiagnosis Agent"
       >
         <span className="absolute inset-0 rounded-full bg-teal-400/20 blur-xl" />
-        <Lottie animationData={robotAnimation} loop className="relative h-16 w-16" />
+        <Lottie animationData={robotAnimation} loop className="relative h-12 w-12 sm:h-16 sm:w-16" />
       </button>
     );
   }
@@ -861,7 +861,7 @@ export function AgentFloatingWidget() {
 
         <div className="flex min-h-0 flex-1 bg-[#F6FAF9]">
           {showHistory && (
-            <aside className="flex w-72 shrink-0 flex-col border-r border-[#E2E8F0] bg-white">
+            <aside className="hidden w-72 shrink-0 flex-col border-r border-[#E2E8F0] bg-white md:flex">
               <div className="border-b border-[#E2E8F0] px-4 py-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-[#0F172A]">Lịch sử chat</h3>
@@ -937,13 +937,13 @@ export function AgentFloatingWidget() {
           )}
 
           <div className="flex min-w-0 flex-1 flex-col">
-            <div ref={listRef} className="flex-1 space-y-4 overflow-y-auto bg-[#F6FAF9] p-4">
+            <div ref={listRef} className="flex-1 space-y-4 overflow-y-auto bg-[#F6FAF9] p-3 sm:p-4">
           {messages.map((message) => (
             <div
               key={message.id}
               className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
             >
-              <div className="group max-w-[86%]">
+              <div className="group max-w-[92%] sm:max-w-[86%]">
                 <div
                   className={[
                     "rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm",

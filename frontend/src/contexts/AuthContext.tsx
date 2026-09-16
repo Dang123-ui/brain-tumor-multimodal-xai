@@ -7,13 +7,14 @@ import { setTokenCookie, removeTokenCookie } from "@/lib/cookie";
 
 interface User {
   id: string;
-  role: "doctor" | "researcher";
+  username?: string;
+  role: "doctor" | "researcher" | "admin" | string;
 }
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (token: string, role: string) => void;
+  login: (token: string, role: string, username?: string) => void;
   logout: () => void;
 }
 
@@ -46,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           // Re-sync cookie on page load (covers tab restore / refresh)
           setTokenCookie(token);
-          setUser({ id: decoded.sub, role: decoded.role });
+          setUser({ id: decoded.sub, username: decoded.username, role: decoded.role });
         }
       } catch {
         logout();
@@ -57,11 +58,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   }, []);
 
-  const login = (token: string, role: string) => {
+  const login = (token: string, role: string, username?: string) => {
     localStorage.setItem("token", token);
     setTokenCookie(token);
     const decoded = jwtDecode(token) as any;
-    setUser({ id: decoded.sub, role: role as any });
+    setUser({ id: decoded.sub, username: username || decoded.username, role: role as any });
   };
 
   return (

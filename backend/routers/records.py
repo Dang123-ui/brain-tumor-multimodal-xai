@@ -16,7 +16,7 @@ import models
 import schemas
 from database import get_db
 from review_utils import classification_review_state
-from utils import minio_client
+from utils import get_current_user, minio_client
 
 router = APIRouter(prefix="/records", tags=["Records"])
 BUCKET_NAME = os.getenv("MINIO_BUCKET") or os.getenv("R2_BUCKET") or "medical-data"
@@ -546,8 +546,13 @@ def _build_history_pdf(report: dict) -> bytes:
 
 
 @router.post("/patients/", status_code=201)
-def create_patient(patient: schemas.PatientCreate, db: Session = Depends(get_db)):
+def create_patient(
+    patient: schemas.PatientCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     new_patient = models.Patient(
+        owner_user_id=crud.current_user_id(current_user),
         name=patient.name,
         patient_external_id=patient.external_id,
         age=patient.age,
@@ -566,8 +571,11 @@ def create_patient(patient: schemas.PatientCreate, db: Session = Depends(get_db)
 
 
 @router.get("/patients/")
-def get_all_patients(db: Session = Depends(get_db)):
-    patients = db.query(models.Patient).all()
+def get_all_patients(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    patients = crud.patient_query_for_user(db, current_user).all()
     response = []
 
     for patient in patients:
@@ -619,8 +627,9 @@ def get_diagnosis_history_patients(
     page: int = 1,
     page_size: int = 10,
     db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
-    patients = db.query(models.Patient).all()
+    patients = crud.patient_query_for_user(db, current_user).all()
     items = []
     query_text = (search or "").strip().lower()
     risk_filter = (risk_group or "").strip().lower()
@@ -739,24 +748,36 @@ def get_diagnosis_history_patients(
 
 
 @router.get("/patients/{patient_id}/history-report", response_model=schemas.PatientHistoryReportResponse)
-def get_patient_history_report(patient_id: str, db: Session = Depends(get_db)):
-    patient = crud.get_patient_by_id_or_external(db, patient_id)
+def get_patient_history_report(
+    patient_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    patient = crud.get_patient_for_user(db, patient_id, current_user)
     if not patient:
         raise HTTPException(status_code=404, detail="Khong tim thay benh nhan")
     return _make_history_report_response(db, patient, generate_if_missing=False)
 
 
 @router.post("/patients/{patient_id}/history-report/regenerate", response_model=schemas.PatientHistoryReportResponse)
-def regenerate_patient_history_report(patient_id: str, db: Session = Depends(get_db)):
-    patient = crud.get_patient_by_id_or_external(db, patient_id)
+def regenerate_patient_history_report(
+    patient_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    patient = crud.get_patient_for_user(db, patient_id, current_user)
     if not patient:
         raise HTTPException(status_code=404, detail="Khong tim thay benh nhan")
     return _make_history_report_response(db, patient, generate_if_missing=True)
 
 
 @router.get("/patients/{patient_id}/history-report/pdf")
-def download_patient_history_report_pdf(patient_id: str, db: Session = Depends(get_db)):
-    patient = crud.get_patient_by_id_or_external(db, patient_id)
+def download_patient_history_report_pdf(
+    patient_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    patient = crud.get_patient_for_user(db, patient_id, current_user)
     if not patient:
         raise HTTPException(status_code=404, detail="Khong tim thay benh nhan")
 
@@ -774,8 +795,12 @@ def download_patient_history_report_pdf(patient_id: str, db: Session = Depends(g
 
 
 @router.get("/patients/{patient_id}")
-def get_patient_records(patient_id: str, db: Session = Depends(get_db)):
-    patient = crud.get_patient_by_id_or_external(db, patient_id)
+def get_patient_records(
+    patient_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    patient = crud.get_patient_for_user(db, patient_id, current_user)
     if not patient:
         raise HTTPException(status_code=404, detail="Khong tim thay benh nhan")
 
@@ -826,6 +851,7 @@ def get_patient_records(patient_id: str, db: Session = Depends(get_db)):
                 "modality": img.modality,
                 "scan_date": img.scan_date,
                 "minio_url": url,
+                "image_url": url,
                 "ai_status": ai_status,
                 "latest_task_id": latest_task_id,
                 "latest_error_message": latest_error_message,
@@ -879,9 +905,13 @@ def get_patient_records(patient_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/patients/{patient_id}/upload-status")
-def get_upload_status(patient_id: str, db: Session = Depends(get_db)):
+def get_upload_status(
+    patient_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     """Lightweight check: which modalities have been uploaded for this patient."""
-    patient = crud.get_patient_by_id_or_external(db, patient_id)
+    patient = crud.get_patient_for_user(db, patient_id, current_user)
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
@@ -920,8 +950,13 @@ def get_upload_status(patient_id: str, db: Session = Depends(get_db)):
 
 
 @router.patch("/patients/{patient_id}")
-def update_patient_info(patient_id: str, patient_update: schemas.PatientUpdate, db: Session = Depends(get_db)):
-    patient = crud.get_patient_by_id_or_external(db, patient_id)
+def update_patient_info(
+    patient_id: str,
+    patient_update: schemas.PatientUpdate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    patient = crud.get_patient_for_user(db, patient_id, current_user)
     if not patient:
         raise HTTPException(status_code=404, detail="Khong tim thay benh nhan")
 
@@ -936,8 +971,12 @@ def update_patient_info(patient_id: str, patient_update: schemas.PatientUpdate, 
 
 
 @router.delete("/images/{image_id}")
-def delete_image_record(image_id: int, db: Session = Depends(get_db)):
-    image = db.query(models.Image).filter(models.Image.id == image_id).first()
+def delete_image_record(
+    image_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    image = crud.get_image_for_user(db, image_id, current_user)
     if not image:
         raise HTTPException(status_code=404, detail="Khong tim thay hinh anh")
 
@@ -986,14 +1025,19 @@ def delete_image_record(image_id: int, db: Session = Depends(get_db)):
     return {"message": "Da xoa dong ket qua va anh MRI thanh cong"}
 
 @router.get("/analysis/image/{image_id}/slice/{index}")
-def get_series_slice(image_id: int, index: int, db: Session = Depends(get_db)):
+def get_series_slice(
+    image_id: int,
+    index: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     """Lấy một lát cắt cụ thể từ chuỗi ảnh (Series) để hiển thị trên Viewer."""
     from fastapi.responses import Response
     import io
     import cv2
     import numpy as np
 
-    image = db.query(models.Image).filter(models.Image.id == image_id).first()
+    image = crud.get_image_for_user(db, image_id, current_user)
     if not image:
         raise HTTPException(status_code=404, detail="Không tìm thấy ảnh")
     

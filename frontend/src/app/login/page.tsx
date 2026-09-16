@@ -23,8 +23,8 @@ function LoginContent() {
 
     try {
       const response = await apiService.auth.login({ username, password });
-      const { access_token, role } = response.data;
-      login(access_token, role);
+      const { access_token, role, username: loggedInUsername } = response.data;
+      login(access_token, role, loggedInUsername);
       router.push(redirectTo);
     } catch (err: any) {
       setError(err.response?.data?.detail || "Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.");
