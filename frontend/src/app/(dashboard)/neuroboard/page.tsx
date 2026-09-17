@@ -24,6 +24,7 @@ import type {
   NeuroPostType,
   NeuroReviewQueueItem,
 } from "@/components/neuroboard/types";
+import { resolveMediaUrl } from "@/lib/api";
 import { neuroboardApi } from "@/lib/neuroboardApi";
 
 type ReviewScope = "all" | "my_reviews" | "second_opinions" | "overdue" | "completed";
@@ -45,7 +46,7 @@ function CaseThumb({ item }: { item: NeuroMessengerCase }) {
     <div className="h-24 w-24 shrink-0 overflow-hidden rounded-md bg-[#E3F2FD]">
       {item.thumbnail_url ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={item.thumbnail_url} alt={caseTitle(item)} className="h-full w-full object-cover" />
+        <img src={resolveMediaUrl(item.thumbnail_url)} alt={caseTitle(item)} className="h-full w-full object-cover" />
       ) : (
         <div className="flex h-full w-full items-center justify-center text-xs font-bold text-[#0D47A1]">
           MRI

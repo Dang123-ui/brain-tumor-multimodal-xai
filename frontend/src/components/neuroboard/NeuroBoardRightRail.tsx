@@ -13,6 +13,7 @@ import {
   Stethoscope,
   X,
 } from "lucide-react";
+import { resolveMediaUrl } from "@/lib/api";
 import { neuroboardApi } from "@/lib/neuroboardApi";
 import type {
   NeuroDoctor,
@@ -337,13 +338,13 @@ export function NeuroBoardRightRail({ attachCase, onAttachCaseConsumed }: Props)
                   {message.image_url && (
                     <button
                       type="button"
-                      onClick={() => setImagePreviewUrl(message.image_url || undefined)}
+                      onClick={() => setImagePreviewUrl(resolveMediaUrl(message.image_url) || undefined)}
                       className="mt-2 block overflow-hidden rounded-md"
                       title="Xem ảnh"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={message.image_url}
+                        src={resolveMediaUrl(message.image_url)}
                         alt={message.image_original_name || "message image"}
                         className="max-h-52 object-cover"
                       />
@@ -357,7 +358,7 @@ export function NeuroBoardRightRail({ attachCase, onAttachCaseConsumed }: Props)
                       </div>
                       {message.case.thumbnail_url && (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={message.case.thumbnail_url} alt={caseTitle(message.case)} className="mt-2 h-24 w-full rounded object-cover" />
+                        <img src={resolveMediaUrl(message.case.thumbnail_url)} alt={caseTitle(message.case)} className="mt-2 h-24 w-full rounded object-cover" />
                       )}
                       <a href={resultHref(message.case)} className="mt-2 inline-flex text-xs font-bold underline">
                         Open Case

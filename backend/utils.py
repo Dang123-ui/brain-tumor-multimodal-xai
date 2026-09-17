@@ -27,6 +27,29 @@ minio_client = Minio(
 )
 
 
+def get_backend_public_base_url() -> str:
+    """Trả về base URL công khai của backend, dùng cho proxy media qua /media/..."""
+    return (
+        os.getenv("BACKEND_PUBLIC_URL")
+        or os.getenv("PUBLIC_API_BASE_URL")
+        or "http://localhost:8000"
+    ).strip().rstrip("/")
+
+
+def build_minio_presigned_url(bucket_name: str, object_name: str, expires: timedelta | None = None) -> str:
+    """Trả về URL browser-safe. Mặc định proxy qua backend để chỉ cần 1 biến public API URL."""
+    object_name = object_name.lstrip("/")
+    backend_base = get_backend_public_base_url()
+    if backend_base and backend_base != "http://localhost:8000":
+        return f"{backend_base}/media/{bucket_name}/{object_name}"
+
+    public_base = (os.getenv("MINIO_PUBLIC_URL") or os.getenv("PUBLIC_MINIO_URL") or "").strip().rstrip("/")
+    if public_base and "localhost" not in public_base and "127.0.0.1" not in public_base:
+        return f"{public_base}/{bucket_name}/{object_name}"
+
+    return f"/media/{bucket_name}/{object_name}"
+
+
 def ensure_bucket_exists(bucket_name: str):
     """Kiểm tra và tạo bucket trên MinIO nếu chưa có."""
     if not minio_client.bucket_exists(bucket_name):

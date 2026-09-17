@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
-import { api, apiService } from "@/lib/api";
+import { apiService, resolveMediaUrl } from "@/lib/api";
 import {
   ArrowLeft,
   User,
@@ -32,12 +32,6 @@ const LABEL_MAP: Record<string, string> = {
 function displayTumorLabel(label?: string | null) {
   if (!label) return "Chưa xác định";
   return LABEL_MAP[label] || label;
-}
-
-function resolveImageUrl(url?: string | null) {
-  if (!url) return "";
-  if (url.startsWith("http") || url.startsWith("data:")) return url;
-  return `${api.defaults.baseURL}${url}`;
 }
 
 function reviewStatusText(status?: string | null) {
@@ -354,14 +348,14 @@ export default function PatientDetailsPage({ params }: { params: Promise<{ id: s
                                   onClick={() =>
                                     setPreviewImage({
                                       title: `${img.modality} #${img.image_id}`,
-                                      src: resolveImageUrl(img.image_url),
+                                      src: resolveMediaUrl(img.image_url),
                                     })
                                   }
                                   className="h-9 w-9 overflow-hidden rounded-lg border border-teal-200 dark:border-teal-500/20 bg-teal-50 dark:bg-teal-500/10"
                                   title="Phóng to ảnh"
                                 >
                                   <img
-                                    src={resolveImageUrl(img.image_url)}
+                                    src={resolveMediaUrl(img.image_url)}
                                     alt={`${img.modality} ${img.image_id}`}
                                     className="h-full w-full object-cover transition-transform hover:scale-105"
                                   />

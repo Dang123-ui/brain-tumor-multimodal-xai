@@ -102,9 +102,9 @@ def presigned_media_url(path: str | None) -> str | None:
         return None
     bucket, object_name = parts
     try:
-        from utils import minio_client
+        from utils import build_minio_presigned_url
 
-        return minio_client.presigned_get_object(bucket, object_name, expires=timedelta(hours=1))
+        return build_minio_presigned_url(bucket, object_name, expires=timedelta(hours=1))
     except Exception:
         return None
 

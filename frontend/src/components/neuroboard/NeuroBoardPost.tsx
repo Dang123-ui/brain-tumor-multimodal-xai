@@ -17,6 +17,7 @@ import {
   ImagePreviewModal,
   type ImagePreviewState,
 } from "@/components/ui/ImagePreviewModal";
+import { resolveMediaUrl } from "@/lib/api";
 import { neuroboardApi } from "@/lib/neuroboardApi";
 import { NeuroBoardComments } from "./NeuroBoardComments";
 import type { NeuroPost } from "./types";
@@ -112,22 +113,28 @@ export function NeuroBoardPost({ post, onUpdated, onDeleted }: Props) {
   }, [post.clinical_media]);
 
   const visibleAttachments = post.attachments.filter(
-    (attachment) => attachment.url && !failedMedia.has(attachment.url),
+    (attachment) => {
+      const url = resolveMediaUrl(attachment.url);
+      return url && !failedMedia.has(url);
+    },
   );
   const visibleClinicalVisuals = clinicalVisuals.filter(
-    (visual) => visual.url && !failedMedia.has(visual.url),
+    (visual) => {
+      const url = resolveMediaUrl(visual.url);
+      return url && !failedMedia.has(url);
+    },
   );
   const galleryItems = [
     ...visibleAttachments.map((attachment) => ({
       key: `attachment-${attachment.id}`,
       title: attachment.original_name || "Ảnh bài đăng",
-      url: attachment.url!,
+      url: resolveMediaUrl(attachment.url),
       label: attachment.original_name || undefined,
     })),
     ...visibleClinicalVisuals.map((visual) => ({
       key: `clinical-${visual.label}-${visual.url}`,
       title: `${post.anonymous_case_code} - ${visual.label}`,
-      url: visual.url,
+      url: resolveMediaUrl(visual.url),
       label: visual.label,
     })),
   ];

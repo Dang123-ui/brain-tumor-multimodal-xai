@@ -95,7 +95,8 @@ def _image_preview_url(image: models.Image) -> str | None:
 
     bucket_name, object_name = storage_path
     try:
-        return minio_client.presigned_get_object(bucket_name=bucket_name, object_name=object_name)
+        from utils import build_minio_presigned_url
+        return build_minio_presigned_url(bucket_name, object_name)
     except Exception:
         return None
 

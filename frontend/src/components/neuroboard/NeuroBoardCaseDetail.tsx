@@ -17,6 +17,7 @@ import {
   ZoomIn,
 } from "lucide-react";
 import { ImagePreviewModal, type ImagePreviewState } from "@/components/ui/ImagePreviewModal";
+import { resolveMediaUrl } from "@/lib/api";
 import { neuroboardApi } from "@/lib/neuroboardApi";
 import type { NeuroCaseDetail, NeuroPost, NeuroRoi, NeuroRoiComment } from "./types";
 
@@ -119,7 +120,14 @@ export function NeuroBoardCaseDetail({ postId }: Props) {
   }, [postId]);
 
   const post = detail?.post;
-  const visuals = useMemo<VisualItem[]>(() => post?.clinical_media?.visuals || [], [post]);
+  const visuals = useMemo<VisualItem[]>(
+    () =>
+      (post?.clinical_media?.visuals || []).map((visual) => ({
+        ...visual,
+        url: resolveMediaUrl(visual.url),
+      })),
+    [post],
+  );
   const selectedVisual = visuals.find((item) => item.label === selectedVisualLabel) || visuals[0];
   const activeComment = detail?.roi_comments.find((comment) => comment.id === activeCommentId);
   const displayRoi = draftRoi || activeComment?.roi || undefined;

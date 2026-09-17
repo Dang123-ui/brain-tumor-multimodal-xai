@@ -80,10 +80,8 @@ def _get_presigned_url(file_path: str | None) -> str | None:
         return None
     try:
         bucket_name, object_name = _parse_minio_path(file_path)
-        return minio_client.presigned_get_object(
-            bucket_name=bucket_name,
-            object_name=object_name,
-        )
+        from utils import build_minio_presigned_url
+        return build_minio_presigned_url(bucket_name, object_name)
     except Exception:
         return None
 

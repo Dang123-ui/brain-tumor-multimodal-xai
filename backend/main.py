@@ -1,8 +1,9 @@
 import os
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 load_dotenv()
 
@@ -129,6 +130,27 @@ app.include_router(agent_router)
 
 # --- NeuroBoard collaboration feed ---
 app.include_router(neuroboard_router)
+
+
+@app.get("/media/{bucket_name}/{object_name:path}")
+def proxy_media(bucket_name: str, object_name: str):
+    from utils import minio_client
+
+    try:
+        response = minio_client.get_object(bucket_name, object_name)
+    except Exception as exc:
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy media: {bucket_name}/{object_name}") from exc
+
+    content_type = response.headers.get("Content-Type", "application/octet-stream")
+
+    def iter_content():
+        try:
+            yield from response.stream(64 * 1024)
+        finally:
+            response.close()
+            response.release_conn()
+
+    return StreamingResponse(iter_content(), media_type=content_type)
 
 
 # ============================================================

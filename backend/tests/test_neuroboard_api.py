@@ -13,6 +13,24 @@ import models
 from database import Base, get_db
 import neuroboard.router as neuroboard_router
 from neuroboard.router import get_current_user, router
+from utils import build_minio_presigned_url
+
+
+def test_build_minio_presigned_url_uses_media_proxy_for_local_public_host(monkeypatch):
+    monkeypatch.delenv("BACKEND_PUBLIC_URL", raising=False)
+    monkeypatch.delenv("PUBLIC_API_BASE_URL", raising=False)
+    monkeypatch.setenv("MINIO_PUBLIC_URL", "http://localhost:9000")
+    url = build_minio_presigned_url("medical-data", "folder/a.png")
+    assert url == "/media/medical-data/folder/a.png"
+    assert "minio:9000" not in url
+
+
+def test_build_minio_presigned_url_allows_real_public_storage_host(monkeypatch):
+    monkeypatch.delenv("BACKEND_PUBLIC_URL", raising=False)
+    monkeypatch.delenv("PUBLIC_API_BASE_URL", raising=False)
+    monkeypatch.setenv("MINIO_PUBLIC_URL", "https://cdn.example.com")
+    url = build_minio_presigned_url("medical-data", "folder/a.png")
+    assert url == "https://cdn.example.com/medical-data/folder/a.png"
 
 
 @pytest.fixture()

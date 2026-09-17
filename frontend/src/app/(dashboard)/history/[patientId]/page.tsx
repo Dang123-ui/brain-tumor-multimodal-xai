@@ -2,7 +2,7 @@
 
 import { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, apiService } from "@/lib/api";
+import { apiService, resolveMediaUrl } from "@/lib/api";
 import { ArrowLeft, Download, Loader2, RefreshCw, Wand2 } from "lucide-react";
 import { ImagePreviewModal, ImagePreviewState } from "@/components/ui/ImagePreviewModal";
 
@@ -25,12 +25,6 @@ function formatPercent(value?: number | null) {
 function formatScore(value?: number | null) {
   if (value == null) return "--";
   return value.toFixed(4);
-}
-
-function resolveImageUrl(url?: string | null) {
-  if (!url) return "";
-  if (url.startsWith("http") || url.startsWith("data:")) return url;
-  return `${api.defaults.baseURL}${url}`;
 }
 
 function RiskTrendChart({ points }: { points: any[] }) {
@@ -287,14 +281,14 @@ export default function PatientHistoryReportPage({ params }: { params: Promise<{
                         onClick={() =>
                           setPreviewImage({
                             title: `MRI lần ${index + 1} - ảnh #${item.image_id}`,
-                            src: resolveImageUrl(item.image_url),
+                            src: resolveMediaUrl(item.image_url),
                           })
                         }
                         className="group relative h-16 w-16 overflow-hidden rounded-lg border border-slate-700"
                         title="Phóng to ảnh MRI"
                       >
                         <img
-                          src={resolveImageUrl(item.image_url)}
+                          src={resolveMediaUrl(item.image_url)}
                           alt={`MRI ${item.image_id}`}
                           className="h-full w-full object-cover transition-transform group-hover:scale-105"
                         />

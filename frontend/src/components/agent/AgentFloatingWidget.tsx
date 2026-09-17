@@ -26,7 +26,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { apiService } from "@/lib/api";
+import { apiService, resolveMediaUrl } from "@/lib/api";
 import {
   ImagePreviewModal,
   ImagePreviewState,
@@ -1049,7 +1049,7 @@ export function AgentFloatingWidget() {
                             onClick={() =>
                               setPreviewImage({
                                 title: `${visual.imageId ? `ID ${visual.imageId} - ` : ""}${visual.label}`,
-                                src: visual.url,
+                                src: resolveMediaUrl(visual.url),
                               })
                             }
                             className="block w-full cursor-zoom-in bg-black"
@@ -1057,7 +1057,7 @@ export function AgentFloatingWidget() {
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                              src={visual.url}
+                              src={resolveMediaUrl(visual.url)}
                               alt={visual.label}
                               className="h-44 w-full object-contain transition hover:opacity-90"
                             />

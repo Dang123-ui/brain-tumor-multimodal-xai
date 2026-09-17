@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { api, resolveMediaUrl } from "@/lib/api";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -251,25 +251,34 @@ export default function MriResultCard({
     reviewState.review_status === "needs_review" || (isLowClassificationConfidence && !hasCompletedClassificationReview);
   const shouldShowClassificationReviewForm = showReviewForm || shouldWarnClassificationReview;
   const shouldShowMultimodalPrognosis = !noTumorDetected && result?.risk_score != null;
-  const multimodalRiskXaiUrl = result?.multimodal_risk_xai_data_url || result?.gradcam_heatmap_data_url || null;
+  const detectionXaiUrl = resolveMediaUrl(result?.detection_xai_data_url);
+  const segmentationXaiUrl = resolveMediaUrl(result?.segmentation_xai_data_url);
+  const classificationXaiUrl = resolveMediaUrl(result?.classification_xai_data_url);
+  const multimodalRiskXaiUrl = resolveMediaUrl(result?.multimodal_risk_xai_data_url || result?.gradcam_heatmap_data_url);
+  const multimodalGradcamUrl = resolveMediaUrl(result?.multimodal_gradcam_heatmap_data_url) || multimodalRiskXaiUrl;
+  const multimodalGradcamPlusUrl = resolveMediaUrl(result?.multimodal_gradcam_plus_heatmap_data_url);
+  const multimodalLayercamUrl = resolveMediaUrl(result?.multimodal_layercam_heatmap_data_url);
+  const gradcamUrl = resolveMediaUrl(result?.gradcam_heatmap_data_url);
+  const gradcamPlusUrl = resolveMediaUrl(result?.gradcam_plus_heatmap_data_url);
+  const layercamUrl = resolveMediaUrl(result?.layercam_heatmap_data_url);
   const multimodalExplanation = result?.multimodal_xai_explanation || result?.xai_explanation || null;
   const imagePanels = [
     {
       key: "bbox",
       title: "Detection (BBox)",
-      src: result?.bbox_overlay_data_url,
+      src: resolveMediaUrl(result?.bbox_overlay_data_url),
       alt: "MRI bbox overlay",
     },
     {
       key: "mask",
       title: "Segmentation (Mask)",
-      src: result?.mask_overlay_data_url,
+      src: resolveMediaUrl(result?.mask_overlay_data_url),
       alt: "MRI mask overlay",
     },
     {
       key: "contour",
       title: "Tumor Contour",
-      src: result?.contour_overlay_data_url,
+      src: resolveMediaUrl(result?.contour_overlay_data_url),
       alt: "MRI contour overlay",
     },
   ].filter((item): item is { key: string; title: string; src: string; alt: string } => Boolean(item.src));
@@ -549,43 +558,43 @@ export default function MriResultCard({
                 </div>
               )}
 
-              {(result?.detection_xai_data_url || result?.segmentation_xai_data_url || result?.classification_xai_data_url || explainingXai || explanationError || aiExplanation) && (
+              {(detectionXaiUrl || segmentationXaiUrl || classificationXaiUrl || explainingXai || explanationError || aiExplanation) && (
                 <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-5 space-y-5">
                   <div className="text-[11px] uppercase tracking-widest text-slate-500 flex items-center gap-2">
                     <Search className="h-4 w-4 text-teal-500" />
                     MRI Core XAI
                   </div>
 
-                  {(result?.detection_xai_data_url || result?.segmentation_xai_data_url || result?.classification_xai_data_url) && (
+                  {(detectionXaiUrl || segmentationXaiUrl || classificationXaiUrl) && (
                     <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-                      {result.detection_xai_data_url && (
+                      {detectionXaiUrl && (
                         <button
                           type="button"
-                          onClick={() => setPreviewImage({ title: "Detection XAI - ODAM", src: result.detection_xai_data_url! })}
+                          onClick={() => setPreviewImage({ title: "Detection XAI - ODAM", src: detectionXaiUrl })}
                           className="rounded-xl border border-slate-800 bg-slate-950/50 p-3 text-left hover:border-teal-500/40 hover:bg-slate-950 transition-all"
                         >
                           <div className="text-[11px] uppercase tracking-widest text-slate-500 mb-3">Detection / ODAM</div>
-                          <img src={result.detection_xai_data_url} alt="Detection XAI" className="w-full max-h-[280px] object-contain rounded-lg bg-slate-950" />
+                          <img src={detectionXaiUrl} alt="Detection XAI" className="w-full max-h-[280px] object-contain rounded-lg bg-slate-950" />
                         </button>
                       )}
-                      {result.segmentation_xai_data_url && (
+                      {segmentationXaiUrl && (
                         <button
                           type="button"
-                          onClick={() => setPreviewImage({ title: "Segmentation XAI - Seg-Eigen-CAM", src: result.segmentation_xai_data_url! })}
+                          onClick={() => setPreviewImage({ title: "Segmentation XAI - Seg-Eigen-CAM", src: segmentationXaiUrl })}
                           className="rounded-xl border border-slate-800 bg-slate-950/50 p-3 text-left hover:border-teal-500/40 hover:bg-slate-950 transition-all"
                         >
                           <div className="text-[11px] uppercase tracking-widest text-slate-500 mb-3">Segmentation / Seg-Eigen-CAM</div>
-                          <img src={result.segmentation_xai_data_url} alt="Segmentation XAI" className="w-full max-h-[280px] object-contain rounded-lg bg-slate-950" />
+                          <img src={segmentationXaiUrl} alt="Segmentation XAI" className="w-full max-h-[280px] object-contain rounded-lg bg-slate-950" />
                         </button>
                       )}
-                      {result.classification_xai_data_url && (
+                      {classificationXaiUrl && (
                         <button
                           type="button"
-                          onClick={() => setPreviewImage({ title: "Classification XAI - Finer-CAM", src: result.classification_xai_data_url! })}
+                          onClick={() => setPreviewImage({ title: "Classification XAI - Finer-CAM", src: classificationXaiUrl })}
                           className="rounded-xl border border-slate-800 bg-slate-950/50 p-3 text-left hover:border-teal-500/40 hover:bg-slate-950 transition-all"
                         >
                           <div className="text-[11px] uppercase tracking-widest text-slate-500 mb-3">Classification / Finer-CAM</div>
-                          <img src={result.classification_xai_data_url} alt="Classification XAI" className="w-full max-h-[280px] object-contain rounded-lg bg-slate-950" />
+                          <img src={classificationXaiUrl} alt="Classification XAI" className="w-full max-h-[280px] object-contain rounded-lg bg-slate-950" />
                         </button>
                       )}
                     </div>
@@ -637,40 +646,40 @@ export default function MriResultCard({
                   </div>
 
                   {/* Multimodal prognosis risk heatmap */}
-                  {(result.multimodal_gradcam_heatmap_data_url || result.multimodal_gradcam_plus_heatmap_data_url || result.multimodal_layercam_heatmap_data_url || multimodalRiskXaiUrl) && (
+                  {(multimodalGradcamUrl || multimodalGradcamPlusUrl || multimodalLayercamUrl || multimodalRiskXaiUrl) && (
                     <div className="mb-6">
                       <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-3">Multimodal Risk XAI (Heatmap)</div>
                       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-                        {(result.multimodal_gradcam_heatmap_data_url || multimodalRiskXaiUrl) && (
+                        {(multimodalGradcamUrl || multimodalRiskXaiUrl) && (
                           <button
                             type="button"
-                            onClick={() => setPreviewImage({ title: "Multimodal Prognosis - Grad-CAM", src: (result.multimodal_gradcam_heatmap_data_url || multimodalRiskXaiUrl)! })}
+                            onClick={() => setPreviewImage({ title: "Multimodal Prognosis - Grad-CAM", src: multimodalGradcamUrl || multimodalRiskXaiUrl })}
                             className="rounded-xl border border-slate-800 bg-slate-950/50 p-3 text-left hover:border-teal-500/40 hover:bg-slate-950 transition-all w-full"
                           >
                             <div className="text-[11px] uppercase tracking-widest text-slate-500 mb-3">Grad-CAM</div>
-                            <img src={result.multimodal_gradcam_heatmap_data_url || multimodalRiskXaiUrl || undefined} alt="Multimodal Grad-CAM" className="w-full max-h-[280px] object-contain rounded-lg bg-slate-950" />
+                            <img src={multimodalGradcamUrl || multimodalRiskXaiUrl || undefined} alt="Multimodal Grad-CAM" className="w-full max-h-[280px] object-contain rounded-lg bg-slate-950" />
                             <div className="mt-3 text-xs text-teal-400">Nhấn để xem ảnh lớn hơn</div>
                           </button>
                         )}
-                        {result.multimodal_gradcam_plus_heatmap_data_url && (
+                        {multimodalGradcamPlusUrl && (
                           <button
                             type="button"
-                            onClick={() => setPreviewImage({ title: "Multimodal Prognosis - Grad-CAM++", src: result.multimodal_gradcam_plus_heatmap_data_url! })}
+                            onClick={() => setPreviewImage({ title: "Multimodal Prognosis - Grad-CAM++", src: multimodalGradcamPlusUrl })}
                             className="rounded-xl border border-slate-800 bg-slate-950/50 p-3 text-left hover:border-teal-500/40 hover:bg-slate-950 transition-all w-full"
                           >
                             <div className="text-[11px] uppercase tracking-widest text-slate-500 mb-3">Grad-CAM++</div>
-                            <img src={result.multimodal_gradcam_plus_heatmap_data_url} alt="Multimodal Grad-CAM++" className="w-full max-h-[280px] object-contain rounded-lg bg-slate-950" />
+                            <img src={multimodalGradcamPlusUrl} alt="Multimodal Grad-CAM++" className="w-full max-h-[280px] object-contain rounded-lg bg-slate-950" />
                             <div className="mt-3 text-xs text-teal-400">Nhấn để xem ảnh lớn hơn</div>
                           </button>
                         )}
-                        {result.multimodal_layercam_heatmap_data_url && (
+                        {multimodalLayercamUrl && (
                           <button
                             type="button"
-                            onClick={() => setPreviewImage({ title: "Multimodal Prognosis - Layer-CAM", src: result.multimodal_layercam_heatmap_data_url! })}
+                            onClick={() => setPreviewImage({ title: "Multimodal Prognosis - Layer-CAM", src: multimodalLayercamUrl })}
                             className="rounded-xl border border-slate-800 bg-slate-950/50 p-3 text-left hover:border-teal-500/40 hover:bg-slate-950 transition-all w-full"
                           >
                             <div className="text-[11px] uppercase tracking-widest text-slate-500 mb-3">Layer-CAM</div>
-                            <img src={result.multimodal_layercam_heatmap_data_url} alt="Multimodal Layer-CAM" className="w-full max-h-[280px] object-contain rounded-lg bg-slate-950" />
+                            <img src={multimodalLayercamUrl} alt="Multimodal Layer-CAM" className="w-full max-h-[280px] object-contain rounded-lg bg-slate-950" />
                             <div className="mt-3 text-xs text-teal-400">Nhấn để xem ảnh lớn hơn</div>
                           </button>
                         )}
@@ -686,41 +695,41 @@ export default function MriResultCard({
                   )}
 
                   {/* XAI Heatmaps — hiển thị cả 3 loại CAM cho MRI Classification */}
-                  {(result.gradcam_heatmap_data_url || result.gradcam_plus_heatmap_data_url || result.layercam_heatmap_data_url) && (
+                  {(gradcamUrl || gradcamPlusUrl || layercamUrl) && (
                     <div className="space-y-4">
                       <div>
                         <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-3">Bản đồ nhiệt XAI Phân loại (Heatmap)</div>
                         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-                          {result.gradcam_heatmap_data_url && (
+                          {gradcamUrl && (
                             <button
                               type="button"
-                              onClick={() => setPreviewImage({ title: "Classification Grad-CAM", src: result.gradcam_heatmap_data_url! })}
+                              onClick={() => setPreviewImage({ title: "Classification Grad-CAM", src: gradcamUrl })}
                               className="rounded-xl border border-slate-800 bg-slate-950/50 p-3 text-left hover:border-teal-500/40 hover:bg-slate-950 transition-all w-full"
                             >
                               <div className="text-[11px] uppercase tracking-widest text-slate-500 mb-3">Grad-CAM</div>
-                              <img src={result.gradcam_heatmap_data_url} alt="Grad-CAM" className="w-full max-h-[280px] object-contain rounded-lg bg-slate-950" />
+                              <img src={gradcamUrl} alt="Grad-CAM" className="w-full max-h-[280px] object-contain rounded-lg bg-slate-950" />
                               <div className="mt-3 text-xs text-teal-400">Nhấn để xem ảnh lớn hơn</div>
                             </button>
                           )}
-                          {result.gradcam_plus_heatmap_data_url && (
+                          {gradcamPlusUrl && (
                             <button
                               type="button"
-                              onClick={() => setPreviewImage({ title: "Classification Grad-CAM++", src: result.gradcam_plus_heatmap_data_url! })}
+                              onClick={() => setPreviewImage({ title: "Classification Grad-CAM++", src: gradcamPlusUrl })}
                               className="rounded-xl border border-slate-800 bg-slate-950/50 p-3 text-left hover:border-teal-500/40 hover:bg-slate-950 transition-all w-full"
                             >
                               <div className="text-[11px] uppercase tracking-widest text-slate-500 mb-3">Grad-CAM++</div>
-                              <img src={result.gradcam_plus_heatmap_data_url} alt="Grad-CAM++" className="w-full max-h-[280px] object-contain rounded-lg bg-slate-950" />
+                              <img src={gradcamPlusUrl} alt="Grad-CAM++" className="w-full max-h-[280px] object-contain rounded-lg bg-slate-950" />
                               <div className="mt-3 text-xs text-teal-400">Nhấn để xem ảnh lớn hơn</div>
                             </button>
                           )}
-                          {result.layercam_heatmap_data_url && (
+                          {layercamUrl && (
                             <button
                               type="button"
-                              onClick={() => setPreviewImage({ title: "Classification Layer-CAM", src: result.layercam_heatmap_data_url! })}
+                              onClick={() => setPreviewImage({ title: "Classification Layer-CAM", src: layercamUrl })}
                               className="rounded-xl border border-slate-800 bg-slate-950/50 p-3 text-left hover:border-teal-500/40 hover:bg-slate-950 transition-all w-full"
                             >
                               <div className="text-[11px] uppercase tracking-widest text-slate-500 mb-3">Layer-CAM</div>
-                              <img src={result.layercam_heatmap_data_url} alt="Layer-CAM" className="w-full max-h-[280px] object-contain rounded-lg bg-slate-950" />
+                              <img src={layercamUrl} alt="Layer-CAM" className="w-full max-h-[280px] object-contain rounded-lg bg-slate-950" />
                               <div className="mt-3 text-xs text-teal-400">Nhấn để xem ảnh lớn hơn</div>
                             </button>
                           )}

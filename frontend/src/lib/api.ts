@@ -1,13 +1,51 @@
 import axios from "axios";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL?.trim();
+const NORMALIZED_API_URL = API_URL?.replace(/\/$/, "") || "";
 
 export const api = axios.create({
-  baseURL: API_URL,
+  baseURL: NORMALIZED_API_URL,
   headers: {
     "Content-Type": "application/json",
   },
 });
+
+export function apiBaseUrl() {
+  return String(api.defaults.baseURL || NORMALIZED_API_URL || "").replace(/\/$/, "");
+}
+
+export function resolveMediaUrl(url?: string | null) {
+  if (!url) return "";
+  if (url.startsWith("data:") || url.startsWith("blob:")) return url;
+
+  const baseUrl = apiBaseUrl();
+  if (url.startsWith("/")) {
+    const mediaPath = url.startsWith("/media/") ? url : `/media${url}`;
+    return baseUrl ? `${baseUrl}${mediaPath}` : mediaPath;
+  }
+
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    const isLocalStorageHost =
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "minio" ||
+      host.endsWith(".internal");
+
+    if (baseUrl && isLocalStorageHost) {
+      const objectPath = parsed.pathname.replace(/^\/+/, "");
+      if (objectPath.startsWith("media/")) {
+        return `${baseUrl}/${objectPath}`;
+      }
+      return `${baseUrl}/media/${objectPath}`;
+    }
+  } catch {
+    // Fall through and return the original value for non-URL strings.
+  }
+
+  return url;
+}
 
 // Request interceptor to add JWT token
 api.interceptors.request.use(
