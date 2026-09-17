@@ -1,5 +1,6 @@
 import io
 import os
+from contextvars import ContextVar
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Tuple
@@ -26,11 +27,22 @@ minio_client = Minio(
     region=os.getenv("MINIO_REGION") or None,
 )
 
+_request_public_base_url: ContextVar[str | None] = ContextVar("request_public_base_url", default=None)
+
+
+def set_request_public_base_url(base_url: str | None):
+    return _request_public_base_url.set((base_url or "").strip().rstrip("/") or None)
+
+
+def reset_request_public_base_url(token) -> None:
+    _request_public_base_url.reset(token)
+
 
 def get_backend_public_base_url() -> str:
     """Trả về base URL công khai của backend, dùng cho proxy media qua /media/..."""
     return (
-        os.getenv("BACKEND_PUBLIC_URL")
+        _request_public_base_url.get()
+        or os.getenv("BACKEND_PUBLIC_URL")
         or os.getenv("PUBLIC_API_BASE_URL")
         or "http://localhost:8000"
     ).strip().rstrip("/")

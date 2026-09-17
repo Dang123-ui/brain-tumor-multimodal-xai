@@ -1,7 +1,7 @@
 import os
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -9,7 +9,7 @@ load_dotenv()
 
 import models
 from database import engine, SessionLocal
-from utils import hash_password
+from utils import hash_password, reset_request_public_base_url, set_request_public_base_url
 from routers import upload, records, multimodal, inference, analysis, auth, admin
 from agent.router import router as agent_router
 from neuroboard.router import router as neuroboard_router
@@ -55,6 +55,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _request_public_base_url(request: Request) -> str:
+    forwarded_proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip()
+    forwarded_host = (request.headers.get("x-forwarded-host") or "").split(",")[0].strip()
+    host = forwarded_host or request.headers.get("host") or request.url.netloc
+    scheme = forwarded_proto or request.url.scheme
+    return f"{scheme}://{host}".rstrip("/")
+
+
+@app.middleware("http")
+async def bind_public_base_url(request: Request, call_next):
+    token = set_request_public_base_url(_request_public_base_url(request))
+    try:
+        return await call_next(request)
+    finally:
+        reset_request_public_base_url(token)
 
 @app.on_event("startup")
 def init_default_admin():
