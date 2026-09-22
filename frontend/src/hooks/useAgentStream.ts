@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { apiBaseUrl } from "@/lib/api";
 
 type StreamEvent = {
   event: string;
@@ -47,7 +46,7 @@ export function useAgentStream() {
       setStreaming(true);
       try {
         const token = localStorage.getItem("token");
-        const response = await fetch(`${API_URL}/agent/chat/stream`, {
+        const response = await fetch(`${apiBaseUrl()}/agent/chat/stream`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -95,4 +94,3 @@ export function useAgentStream() {
 
   return { streaming, streamChat };
 }
-

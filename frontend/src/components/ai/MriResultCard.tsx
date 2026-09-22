@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { api, resolveMediaUrl } from "@/lib/api";
+import { api, apiBaseUrl, resolveMediaUrl } from "@/lib/api";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -140,7 +140,8 @@ export default function MriResultCard({
 
   const getSliceUrl = (index: number) => {
     if (!result?.image_id) return "";
-    return `${api.defaults.baseURL}/records/analysis/image/${result.image_id}/slice/${index}`;
+    return resolveMediaUrl(`/records/analysis/image/${result.image_id}/slice/${index}`) ||
+      `${apiBaseUrl()}/records/analysis/image/${result.image_id}/slice/${index}`;
   };
 
   const handleRating = async (star: number) => {

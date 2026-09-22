@@ -1,4 +1,4 @@
-import { api } from "@/lib/api";
+import { api, apiBaseUrl as getApiBaseUrl } from "@/lib/api";
 
 export type AgentMessageRole = "user" | "assistant" | "tool" | "error";
 
@@ -84,10 +84,6 @@ type AgentStreamHandlers = {
   onFinal?: (data: AgentStreamFinal) => void;
 };
 
-function apiBaseUrl() {
-  return String(api.defaults.baseURL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
-}
-
 function authHeaders(): Record<string, string> {
   if (typeof window === "undefined") return {};
   const token = localStorage.getItem("token");
@@ -140,7 +136,7 @@ export const agentApi = {
     payload: AgentChatPayload,
     handlers: AgentStreamHandlers,
   ) => {
-    const response = await fetch(`${apiBaseUrl()}/agent/chat/stream`, {
+    const response = await fetch(`${getApiBaseUrl()}/agent/chat/stream`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

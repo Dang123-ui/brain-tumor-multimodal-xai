@@ -30,6 +30,7 @@ from agent.memory import (
 from agent.schemas import AgentChatRequest, AgentChatResponse
 from database import get_db
 from routers.inference import _create_inference_task
+from routers.inference import _ensure_celery_worker_available
 from utils import (
     ensure_bucket_exists,
     get_current_user,
@@ -372,6 +373,9 @@ async def quick_mri_diagnosis(
         raise HTTPException(status_code=404, detail=f"Không tìm thấy bệnh nhân '{patient_id}'")
 
     try:
+        # Fail before storing the upload when the worker is unavailable. This
+        # keeps the chat workflow from creating an image/task that can never run.
+        _ensure_celery_worker_available()
         ensure_bucket_exists(BUCKET_NAME)
 
         file_bytes = await file.read()

@@ -3,6 +3,17 @@ import axios from "axios";
 const API_URL = process.env.NEXT_PUBLIC_API_URL?.trim();
 const NORMALIZED_API_URL = API_URL?.replace(/\/$/, "") || "";
 
+const API_ROUTE_PREFIXES = [
+  "/agent/",
+  "/analytics/",
+  "/auth/",
+  "/inference/",
+  "/media/",
+  "/neuroboard/",
+  "/records/",
+  "/upload/",
+];
+
 export const api = axios.create({
   baseURL: NORMALIZED_API_URL,
   headers: {
@@ -11,7 +22,17 @@ export const api = axios.create({
 });
 
 export function apiBaseUrl() {
-  return String(api.defaults.baseURL || NORMALIZED_API_URL || "").replace(/\/$/, "");
+  const configured = String(api.defaults.baseURL || NORMALIZED_API_URL || "").replace(/\/$/, "");
+  if (configured) return configured;
+
+  // Local development can use the backend port without an env file. A deployed
+  // browser must receive NEXT_PUBLIC_API_URL at build time instead of silently
+  // falling back to the developer machine's localhost.
+  if (typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname)) {
+    return "http://localhost:8000";
+  }
+
+  return "";
 }
 
 export function resolveMediaUrl(url?: string | null) {
@@ -20,8 +41,9 @@ export function resolveMediaUrl(url?: string | null) {
 
   const baseUrl = apiBaseUrl();
   if (url.startsWith("/")) {
-    const mediaPath = url.startsWith("/media/") ? url : `/media${url}`;
-    return baseUrl ? `${baseUrl}${mediaPath}` : mediaPath;
+    const isApiRoute = API_ROUTE_PREFIXES.some((prefix) => url.startsWith(prefix));
+    const requestPath = isApiRoute || url.startsWith("/health") ? url : `/media${url}`;
+    return baseUrl ? `${baseUrl}${requestPath}` : requestPath;
   }
 
   try {
