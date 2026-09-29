@@ -996,6 +996,53 @@ def delete_image_record(
         except Exception as exc:
             print(f"[Warning] Could not delete object storage file {bucket_name}/{object_name}: {exc}")
 
+    # Remove social/collaboration references before deleting the MRI row.
+    # These foreign keys intentionally protect images from accidental deletion.
+    post_ids = [
+        post_id
+        for (post_id,) in db.query(models.NeuroPost.id)
+        .filter(models.NeuroPost.image_id == image_id)
+        .all()
+    ]
+    if post_ids:
+        db.query(models.NeuroRoiComment).filter(models.NeuroRoiComment.post_id.in_(post_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(models.NeuroPostComment).filter(models.NeuroPostComment.post_id.in_(post_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(models.NeuroPostReaction).filter(models.NeuroPostReaction.post_id.in_(post_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(models.NeuroPostSave).filter(models.NeuroPostSave.post_id.in_(post_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(models.NeuroPostAttachment).filter(models.NeuroPostAttachment.post_id.in_(post_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(models.NeuroPost).filter(models.NeuroPost.id.in_(post_ids)).delete(synchronize_session=False)
+
+    second_opinion_ids = [
+        request_id
+        for (request_id,) in db.query(models.NeuroSecondOpinionRequest.id)
+        .filter(models.NeuroSecondOpinionRequest.case_image_id == image_id)
+        .all()
+    ]
+    if second_opinion_ids:
+        db.query(models.NeuroSecondOpinionRequest).filter(
+            models.NeuroSecondOpinionRequest.id.in_(second_opinion_ids)
+        ).update({models.NeuroSecondOpinionRequest.message_id: None}, synchronize_session=False)
+        db.query(models.NeuroMessage).filter(
+            models.NeuroMessage.second_opinion_request_id.in_(second_opinion_ids)
+        ).update({models.NeuroMessage.second_opinion_request_id: None}, synchronize_session=False)
+        db.query(models.NeuroSecondOpinionRequest).filter(
+            models.NeuroSecondOpinionRequest.id.in_(second_opinion_ids)
+        ).delete(synchronize_session=False)
+
+    db.query(models.NeuroMessage).filter(models.NeuroMessage.case_image_id == image_id).update(
+        {models.NeuroMessage.case_image_id: None}, synchronize_session=False
+    )
+
     analysis = db.query(models.AnalysisResult).filter(models.AnalysisResult.image_id == image_id).first()
     if analysis:
         db.delete(analysis)
@@ -1021,6 +1068,12 @@ def delete_image_record(
         models.InferenceTask.target_id == image_id,
     ).all()
     for task in tasks:
+        db.delete(task)
+    prognosis_tasks = db.query(models.InferenceTask).filter(
+        models.InferenceTask.task_type == "prognosis",
+        models.InferenceTask.result["image_id"].as_integer() == image_id,
+    ).all()
+    for task in prognosis_tasks:
         db.delete(task)
 
     analysis_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "analysis_results", str(image_id))
