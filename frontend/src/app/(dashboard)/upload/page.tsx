@@ -380,19 +380,7 @@ export default function UploadPage() {
     setProgress(null);
 
     try {
-      if (uploadedImageId) {
-        setStatusMsg({ text: "Đang chạy pipeline MRI cho ảnh vừa upload...", type: "success" });
-        const mriTaskResponse = await apiService.inference.runMri(uploadedImageId);
-        const mriTaskId = mriTaskResponse.data?.task_id;
-
-        if (mriTaskId) {
-          await apiService.inference.waitForTask(mriTaskId, 3000, 1200000, (p, s) => {
-            const percent = Math.min(60, Math.round((p || 0) * 0.6));
-            setProgress({ percent, status: s });
-            setStatusMsg({ text: s, type: "success" });
-          });
-        }
-      }
+      // The prognosis task owns the complete MRI and multimodal pipeline.
 
       setStatusMsg({ text: "Đang chạy pipeline tiên lượng đa mô thức...", type: "success" });
       const taskResponse = await apiService.inference.runPrognosis(
@@ -403,7 +391,7 @@ export default function UploadPage() {
       
       if (taskId) {
         await apiService.inference.waitForTask(taskId, 3000, 1200000, (p, s) => {
-          const percent = uploadedImageId ? 60 + Math.round((p || 0) * 0.4) : p;
+          const percent = p;
           setProgress({ percent, status: s });
           setStatusMsg({ text: s, type: "success" });
         });

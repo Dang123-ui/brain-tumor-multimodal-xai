@@ -127,6 +127,12 @@ export default function PatientDetailsPage({ params }: { params: Promise<{ id: s
         await apiService.inference.waitForTask(taskId, 2000, 300000);
       }
 
+      const prognosisResponse = await apiService.inference.runPrognosis(id, img.image_id);
+      const prognosisTaskId = prognosisResponse.data?.task_id;
+      if (prognosisTaskId) {
+        await apiService.inference.waitForTask(prognosisTaskId, 2000, 1200000);
+      }
+
       await fetchPatientData();
       router.push(`/results/${id}?imageId=${img.image_id}`);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -177,7 +183,10 @@ export default function PatientDetailsPage({ params }: { params: Promise<{ id: s
     setPrognosisLoading(true);
 
     try {
-      const taskResponse = await apiService.inference.runPrognosis(id);
+      const latestImage = [...(data?.images || [])]
+        .filter((image: any) => image.modality === "MRI" || image.modality === "MRI_SERIES")
+        .sort((a: any, b: any) => new Date(b.scan_date).getTime() - new Date(a.scan_date).getTime())[0];
+      const taskResponse = await apiService.inference.runPrognosis(id, latestImage?.image_id);
       const taskId = taskResponse.data?.task_id;
       if (taskId) {
         await apiService.inference.waitForTask(taskId, 2000, 300000);
