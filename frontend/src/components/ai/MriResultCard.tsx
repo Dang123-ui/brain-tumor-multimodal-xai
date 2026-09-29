@@ -534,11 +534,11 @@ export default function MriResultCard({
                       <select
                         value={expertLabel}
                         onChange={(event) => setExpertLabel(event.target.value)}
-                        className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                        className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium !text-[#0F172A] outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 [color-scheme:light]"
                       >
-                        <option value="Glioma">Glioma</option>
-                        <option value="Meningioma">Meningioma</option>
-                        <option value="Pituitary tumor">Pituitary tumor</option>
+                        <option className="bg-white !text-[#0F172A]" value="Glioma">Glioma</option>
+                        <option className="bg-white !text-[#0F172A]" value="Meningioma">Meningioma</option>
+                        <option className="bg-white !text-[#0F172A]" value="Pituitary tumor">Pituitary tumor</option>
                       </select>
                       <input
                         value={expertComment}
