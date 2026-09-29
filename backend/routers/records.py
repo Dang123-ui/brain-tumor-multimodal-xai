@@ -582,7 +582,10 @@ def get_all_patients(
     for patient in patients:
         latest_image = (
             db.query(models.Image)
-            .filter(models.Image.patient_id == patient.id)
+            .filter(
+                models.Image.patient_id == patient.id,
+                models.Image.modality.in_(["MRI", "MRI_SERIES"]),
+            )
             .order_by(models.Image.scan_date.desc())
             .first()
         )
