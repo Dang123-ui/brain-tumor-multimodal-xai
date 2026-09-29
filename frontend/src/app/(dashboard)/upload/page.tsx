@@ -372,14 +372,17 @@ export default function UploadPage() {
       return;
     }
 
+    // Keep the upload selected for this run stable even if React state changes.
+    const uploadedImageId = lastUploadedImageId;
+
     setUploading(true);
     setStatusMsg({ text: "Đang kích hoạt quy trình phân tích tổng hợp AI...", type: "success" });
     setProgress(null);
 
     try {
-      if (lastUploadedImageId) {
+      if (uploadedImageId) {
         setStatusMsg({ text: "Đang chạy pipeline MRI cho ảnh vừa upload...", type: "success" });
-        const mriTaskResponse = await apiService.inference.runMri(lastUploadedImageId);
+        const mriTaskResponse = await apiService.inference.runMri(uploadedImageId);
         const mriTaskId = mriTaskResponse.data?.task_id;
 
         if (mriTaskId) {
@@ -392,12 +395,15 @@ export default function UploadPage() {
       }
 
       setStatusMsg({ text: "Đang chạy pipeline tiên lượng đa mô thức...", type: "success" });
-      const taskResponse = await apiService.inference.runPrognosis(patientId.trim());
+      const taskResponse = await apiService.inference.runPrognosis(
+        patientId.trim(),
+        uploadedImageId || undefined,
+      );
       const taskId = taskResponse.data?.task_id;
       
       if (taskId) {
         await apiService.inference.waitForTask(taskId, 3000, 1200000, (p, s) => {
-          const percent = lastUploadedImageId ? 60 + Math.round((p || 0) * 0.4) : p;
+          const percent = uploadedImageId ? 60 + Math.round((p || 0) * 0.4) : p;
           setProgress({ percent, status: s });
           setStatusMsg({ text: s, type: "success" });
         });
@@ -411,7 +417,11 @@ export default function UploadPage() {
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
       // Tự động chuyển sang trang kết quả
-      router.push(`/results/${patientId.trim()}`);
+      const resultPath = `/results/${encodeURIComponent(patientId.trim())}`;
+      const imageQuery = uploadedImageId
+        ? `?imageId=${encodeURIComponent(String(uploadedImageId))}`
+        : "";
+      router.push(`${resultPath}${imageQuery}`);
     } catch (err: any) {
       const errorText = `Lỗi chạy pipeline: ${getErrorMessage(err, "Không thể thực hiện phân tích.")}`;
       setStatusMsg({ text: errorText, type: "error" });

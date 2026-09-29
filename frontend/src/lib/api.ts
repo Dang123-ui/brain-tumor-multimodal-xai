@@ -151,8 +151,9 @@ export const apiService = {
     getResult: async (patientId: string) => {
       return api.get(`/records/analysis/${patientId}`);
     },
-    getFullResult: async (patientId: string) => {
-      return api.get(`/records/analysis/patient/${patientId}/full`);
+    getFullResult: async (patientId: string, imageId?: string | number) => {
+      const suffix = imageId != null ? `?image_id=${encodeURIComponent(String(imageId))}` : "";
+      return api.get(`/records/analysis/patient/${patientId}/full${suffix}`);
     },
     getSurvivalCurve: async (patientId: string) => {
       return api.get(`/analytics/survival/${patientId}`);
@@ -190,8 +191,9 @@ export const apiService = {
     runMri: async (imageId: string | number) => {
       return api.post(`/inference/mri/${imageId}`);
     },
-    runPrognosis: async (patientId: string | number) => {
-      return api.post(`/inference/prognosis/${patientId}`);
+    runPrognosis: async (patientId: string | number, imageId?: string | number) => {
+      const suffix = imageId != null ? `?image_id=${encodeURIComponent(String(imageId))}` : "";
+      return api.post(`/inference/prognosis/${patientId}${suffix}`);
     },
     getTask: async (taskId: string | number) => {
       return api.get(`/inference/tasks/${taskId}`);

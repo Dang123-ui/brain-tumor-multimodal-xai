@@ -8,7 +8,7 @@ from typing import Any, List
 import cv2
 import numpy as np
 import pydicom
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse, Response
 from PIL import Image, ImageDraw, ImageFile, ImageFont, ImageOps
 from sqlalchemy.orm import Session
@@ -977,6 +977,7 @@ def _build_classification_xai_fallback(
 @router.get("/records/analysis/patient/{patient_id}/full", response_model=schemas.ImageAIResultResponse)
 def get_patient_full_analysis(
     patient_id: str,
+    image_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -991,12 +992,26 @@ def get_patient_full_analysis(
     real_id = patient.id
 
     # Lấy AnalysisResult mới nhất
-    analysis = (
-        db.query(models.AnalysisResult)
-        .filter(models.AnalysisResult.patient_id == real_id)
-        .order_by(models.AnalysisResult.created_at.desc())
-        .first()
+    selected_image = None
+    if image_id is not None:
+        selected_image = (
+            db.query(models.Image)
+            .filter(
+                models.Image.id == image_id,
+                models.Image.patient_id == real_id,
+                models.Image.modality.in_(["MRI", "MRI_SERIES"]),
+            )
+            .first()
+        )
+        if not selected_image:
+            raise HTTPException(status_code=404, detail="Khong tim thay anh MRI cua benh nhan")
+
+    analysis_query = db.query(models.AnalysisResult).filter(
+        models.AnalysisResult.patient_id == real_id
     )
+    if image_id is not None:
+        analysis_query = analysis_query.filter(models.AnalysisResult.image_id == image_id)
+    analysis = analysis_query.order_by(models.AnalysisResult.created_at.desc()).first()
 
     # Lấy InferenceTask mới nhất (prognosis hoặc mri_pipeline)
     prognosis_task = (
@@ -1010,7 +1025,7 @@ def get_patient_full_analysis(
     )
 
     # Cũng tìm MRI task nếu có (để lấy overlay images)
-    mri_image = (
+    mri_image = selected_image or (
         db.query(models.Image)
         .filter(
             models.Image.patient_id == real_id,
@@ -1023,6 +1038,18 @@ def get_patient_full_analysis(
     mri_task = None
     if mri_image:
         mri_task = _get_latest_mri_task(db, mri_image.id)
+
+    if image_id is not None and prognosis_task:
+        prognosis_image_id = (prognosis_task.result or {}).get("image_id")
+        if prognosis_image_id is not None:
+            try:
+                prognosis_image_id = int(prognosis_image_id)
+            except (TypeError, ValueError):
+                prognosis_image_id = None
+        if prognosis_image_id != image_id and (
+            not mri_task or prognosis_task.created_at < mri_task.created_at
+        ):
+            prognosis_task = None
 
     if not analysis and not prognosis_task and not mri_task:
         raise HTTPException(status_code=404, detail="Chua co ket qua phan tich cho benh nhan nay.")

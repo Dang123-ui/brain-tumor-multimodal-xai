@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 import crud
@@ -19,6 +19,7 @@ def _create_inference_task(
     task_type: str,
     target_id: int,
     celery_signature: str,
+    celery_extra_args: list[int | None] | None = None,
 ) -> models.InferenceTask:
     """Helper: tạo bản ghi InferenceTask trong DB rồi gửi task lên Celery."""
     placeholder_celery_id = str(uuid.uuid4())
@@ -39,7 +40,7 @@ def _create_inference_task(
         # Gửi task bất đồng bộ tới Celery worker
         celery_app.send_task(
             celery_signature,
-            args=[db_task.id, target_id],
+            args=[db_task.id, target_id, *(celery_extra_args or [])],
             task_id=placeholder_celery_id,
         )
         print(f"[API] Da gui task_id={db_task.id} thanh cong.")
@@ -121,6 +122,7 @@ def trigger_mri_inference(
 @router.post("/prognosis/{patient_id}", response_model=schemas.InferenceTaskResponse)
 def trigger_prognosis_inference(
     patient_id: str,
+    image_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -131,6 +133,18 @@ def trigger_prognosis_inference(
 
     # Sử dụng ID số nội bộ từ đây
     real_id = patient.id
+
+    selected_image_id = None
+    if image_id is not None:
+        selected_image = crud.get_image_for_user(db, image_id, current_user)
+        if not selected_image or selected_image.patient_id != real_id:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Khong tim thay anh MRI image_id={image_id} cua benh nhan nay",
+            )
+        if selected_image.modality not in ["MRI", "MRI_SERIES"]:
+            raise HTTPException(status_code=400, detail="image_id phai la anh MRI hoac MRI_SERIES")
+        selected_image_id = selected_image.id
 
     # Kiểm tra dữ liệu RNA đã được tải lên chưa (cần thiết cho Fusion Model)
     # RnaData is no longer strictly mandatory since the model handles missing data gracefully via masking,
@@ -149,6 +163,7 @@ def trigger_prognosis_inference(
         task_type="prognosis",
         target_id=real_id,
         celery_signature="tasks.run_prognosis_pipeline",
+        celery_extra_args=[selected_image_id],
     )
 
     return schemas.InferenceTaskResponse(

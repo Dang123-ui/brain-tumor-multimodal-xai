@@ -41,7 +41,7 @@ export default function ResultsPage({ params }: { params: Promise<{ patientId: s
         const imageId = searchParams.get("imageId");
         setOpenReviewForm(searchParams.get("review") === "1");
         if (imageId) {
-          const res = await apiService.analysis.getImageResult(imageId);
+          const res = await apiService.analysis.getFullResult(patientId, imageId);
           setResult(res.data as ResultPayload);
           try {
             const patientRes = await apiService.patients.getById(patientId);
