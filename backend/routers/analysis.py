@@ -904,20 +904,41 @@ def _get_latest_mri_task(db: Session, image_id: int) -> models.InferenceTask | N
     )
 
 
+def _get_latest_prognosis_task(
+    db: Session,
+    patient_id: int,
+    image_id: int | None = None,
+) -> models.InferenceTask | None:
+    """Return prognosis for the requested MRI, never another MRI of the patient."""
+    tasks = (
+        db.query(models.InferenceTask)
+        .filter(
+            models.InferenceTask.task_type == "prognosis",
+            models.InferenceTask.target_id == patient_id,
+        )
+        .order_by(models.InferenceTask.created_at.desc(), models.InferenceTask.id.desc())
+        .all()
+    )
+    if image_id is None:
+        return tasks[0] if tasks else None
+
+    for task in tasks:
+        result = task.result if isinstance(task.result, dict) else {}
+        task_image_id = result.get("image_id")
+        try:
+            if task_image_id is not None and int(task_image_id) == image_id:
+                return task
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
 def _get_latest_classification_xai_task(db: Session, image: models.Image) -> models.InferenceTask | None:
     mri_task = _get_latest_mri_task(db, image.id)
     if mri_task and isinstance(mri_task.result, dict) and mri_task.result.get("classification_xai_path"):
         return mri_task
 
-    return (
-        db.query(models.InferenceTask)
-        .filter(
-            models.InferenceTask.task_type == "prognosis",
-            models.InferenceTask.target_id == image.patient_id,
-        )
-        .order_by(models.InferenceTask.created_at.desc())
-        .first()
-    )
+    return _get_latest_prognosis_task(db, image.patient_id, image.id)
 
 
 def _build_classification_xai_fallback(
@@ -1014,15 +1035,7 @@ def get_patient_full_analysis(
     analysis = analysis_query.order_by(models.AnalysisResult.created_at.desc()).first()
 
     # Lấy InferenceTask mới nhất (prognosis hoặc mri_pipeline)
-    prognosis_task = (
-        db.query(models.InferenceTask)
-        .filter(
-            models.InferenceTask.task_type == "prognosis",
-            models.InferenceTask.target_id == real_id,
-        )
-        .order_by(models.InferenceTask.created_at.desc())
-        .first()
-    )
+    prognosis_task = _get_latest_prognosis_task(db, real_id, image_id)
 
     # Cũng tìm MRI task nếu có (để lấy overlay images)
     mri_image = selected_image or (
@@ -1038,18 +1051,6 @@ def get_patient_full_analysis(
     mri_task = None
     if mri_image:
         mri_task = _get_latest_mri_task(db, mri_image.id)
-
-    if image_id is not None and prognosis_task:
-        prognosis_image_id = (prognosis_task.result or {}).get("image_id")
-        if prognosis_image_id is not None:
-            try:
-                prognosis_image_id = int(prognosis_image_id)
-            except (TypeError, ValueError):
-                prognosis_image_id = None
-        if prognosis_image_id != image_id and (
-            not mri_task or prognosis_task.created_at < mri_task.created_at
-        ):
-            prognosis_task = None
 
     if not analysis and not prognosis_task and not mri_task:
         raise HTTPException(status_code=404, detail="Chua co ket qua phan tich cho benh nhan nay.")
@@ -1481,18 +1482,8 @@ def download_image_report(
 
     latest_task = _get_latest_mri_task(db, image_id)
     # Cũng tìm prognosis task theo patient_id nếu không có mri_pipeline task
-    prognosis_task = (
-        db.query(models.InferenceTask)
-        .filter(
-            models.InferenceTask.task_type == "prognosis",
-            models.InferenceTask.target_id == image.patient_id,
-        )
-        .order_by(models.InferenceTask.created_at.desc())
-        .first()
-    )
+    prognosis_task = _get_latest_prognosis_task(db, image.patient_id, image_id)
     analysis = db.query(models.AnalysisResult).filter(models.AnalysisResult.image_id == image_id).first()
-    if not analysis:
-        analysis = db.query(models.AnalysisResult).filter(models.AnalysisResult.patient_id == image.patient_id).first()
     if not latest_task and not prognosis_task and not analysis:
         raise HTTPException(status_code=404, detail="Chua co ket qua de xuat bao cao")
 
