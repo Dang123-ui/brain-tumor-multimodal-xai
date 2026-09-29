@@ -374,6 +374,13 @@ export default function UploadPage() {
 
     // Keep the upload selected for this run stable even if React state changes.
     const uploadedImageId = lastUploadedImageId;
+    if (!uploadedImageId) {
+      setStatusMsg({
+        text: "Vui lòng upload MRI mới trước khi chạy pipeline. Hệ thống không tự chạy lại kết quả cũ.",
+        type: "error",
+      });
+      return;
+    }
 
     setUploading(true);
     setStatusMsg({ text: "Đang kích hoạt quy trình phân tích tổng hợp AI...", type: "success" });

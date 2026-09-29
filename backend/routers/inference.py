@@ -145,6 +145,20 @@ def trigger_prognosis_inference(
         if selected_image.modality not in ["MRI", "MRI_SERIES"]:
             raise HTTPException(status_code=400, detail="image_id phai la anh MRI hoac MRI_SERIES")
         selected_image_id = selected_image.id
+    else:
+        mri_count = (
+            db.query(models.Image)
+            .filter(
+                models.Image.patient_id == real_id,
+                models.Image.modality.in_(["MRI", "MRI_SERIES"]),
+            )
+            .count()
+        )
+        if mri_count > 0:
+            raise HTTPException(
+                status_code=409,
+                detail="Bat buoc gui image_id cua MRI dang chay de tranh chay lai ket qua cu.",
+            )
 
     # Kiểm tra dữ liệu RNA đã được tải lên chưa (cần thiết cho Fusion Model)
     # RnaData is no longer strictly mandatory since the model handles missing data gracefully via masking,
