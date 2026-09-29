@@ -474,13 +474,13 @@ def run_prognosis_pipeline(self, task_id: int, patient_id: int, image_id: int | 
         task_record.status = "done"
         task_record.result = clean_result
 
-        # Prognosis process: attach prognosis to the latest MRI analysis row.
+        # Attach the prognosis to the exact MRI selected for this task.
         analysis = None
         if mri_record:
             analysis = db.query(models.AnalysisResult).filter(
                 models.AnalysisResult.image_id == mri_record.id
             ).first()
-        if not analysis:
+        if not analysis and not mri_record:
             analysis = db.query(models.AnalysisResult).filter(
                 models.AnalysisResult.patient_id == patient_id
             ).order_by(models.AnalysisResult.created_at.desc()).first()

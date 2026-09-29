@@ -588,8 +588,11 @@ def get_all_patients(
         )
         latest_analysis = (
             db.query(models.AnalysisResult)
-            .filter(models.AnalysisResult.patient_id == patient.id)
-            .order_by(models.AnalysisResult.created_at.desc())
+            .filter(
+                models.AnalysisResult.image_id == latest_image.id
+                if latest_image
+                else models.AnalysisResult.id == -1
+            )
             .first()
         )
         no_tumor_detected = bool(latest_analysis and getattr(latest_analysis, "no_tumor_detected", False))
@@ -658,9 +661,10 @@ def get_diagnosis_history_patients(
         )
         latest_analysis = (
             db.query(models.AnalysisResult)
-            .filter(models.AnalysisResult.patient_id == patient.id)
-            .order_by(models.AnalysisResult.created_at.desc())
+            .filter(models.AnalysisResult.image_id == latest_image.id)
             .first()
+            if latest_image
+            else None
         )
 
         if query_text:
