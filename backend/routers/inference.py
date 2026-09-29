@@ -20,6 +20,7 @@ def _create_inference_task(
     target_id: int,
     celery_signature: str,
     celery_extra_args: list[int | None] | None = None,
+    initial_result: dict | None = None,
 ) -> models.InferenceTask:
     """Helper: tạo bản ghi InferenceTask trong DB rồi gửi task lên Celery."""
     placeholder_celery_id = str(uuid.uuid4())
@@ -29,6 +30,7 @@ def _create_inference_task(
         task_type=task_type,
         target_id=target_id,
         status="pending",
+        result=initial_result,
     )
     db.add(db_task)
     db.commit()
@@ -52,6 +54,37 @@ def _create_inference_task(
         raise HTTPException(status_code=503, detail=db_task.error_message) from e
         
     return db_task
+
+
+def _reusable_task(
+    db: Session,
+    task_type: str,
+    target_id: int,
+    image_id: int | None = None,
+) -> models.InferenceTask | None:
+    """Reuse an active/completed task for the exact image instead of duplicating work."""
+    tasks = (
+        db.query(models.InferenceTask)
+        .filter(
+            models.InferenceTask.task_type == task_type,
+            models.InferenceTask.target_id == target_id,
+            models.InferenceTask.status.in_(["pending", "processing", "done"]),
+        )
+        .order_by(models.InferenceTask.created_at.desc(), models.InferenceTask.id.desc())
+        .all()
+    )
+    if image_id is None:
+        return tasks[0] if tasks else None
+
+    for task in tasks:
+        result = task.result if isinstance(task.result, dict) else {}
+        task_image_id = result.get("image_id")
+        try:
+            if task_image_id is not None and int(task_image_id) == image_id:
+                return task
+        except (TypeError, ValueError):
+            continue
+    return None
 
 
 def _ensure_celery_worker_available() -> None:
@@ -98,6 +131,15 @@ def trigger_mri_inference(
     _ensure_celery_worker_available()
 
     # Tương tự như Prognosis, bỏ qua việc check task cũ để tránh deadlock khi worker sập.
+
+    existing_task = _reusable_task(db, "mri_pipeline", image_id)
+    if existing_task:
+        return schemas.InferenceTaskResponse(
+            task_id=existing_task.id,
+            celery_task_id=existing_task.celery_task_id,
+            status=existing_task.status,
+            message="Đã có task MRI tương ứng cho ảnh này; sử dụng lại task hiện tại.",
+        )
 
     db_task = _create_inference_task(
         db=db,
@@ -169,8 +211,14 @@ def trigger_prognosis_inference(
 
     _ensure_celery_worker_available()
 
-    # Loại bỏ cơ chế kiểm tra tác vụ cũ vì nếu Worker sập, DB sẽ lưu trạng thái 'processing' mãi mãi.
-    # Luôn luôn tạo một task mới khi người dùng yêu cầu để tránh bị kẹt (deadlock).
+    existing_task = _reusable_task(db, "prognosis", real_id, selected_image_id)
+    if existing_task:
+        return schemas.InferenceTaskResponse(
+            task_id=existing_task.id,
+            celery_task_id=existing_task.celery_task_id,
+            status=existing_task.status,
+            message="Đã có task tiên lượng tương ứng cho ảnh này; sử dụng lại task hiện tại.",
+        )
 
     db_task = _create_inference_task(
         db=db,
@@ -178,6 +226,7 @@ def trigger_prognosis_inference(
         target_id=real_id,
         celery_signature="tasks.run_prognosis_pipeline",
         celery_extra_args=[selected_image_id],
+        initial_result={"image_id": selected_image_id},
     )
 
     return schemas.InferenceTaskResponse(
