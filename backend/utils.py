@@ -19,13 +19,18 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 # MINIO CLIENT
 # ============================================================
 
-minio_client = Minio(
-    os.getenv("MINIO_URL", "minio:9000"),
-    access_key=os.getenv("MINIO_ACCESS_KEY", "admin"),
-    secret_key=os.getenv("MINIO_SECRET_KEY", "password123"),
-    secure=os.getenv("MINIO_SECURE", "false").lower() in {"1", "true", "yes", "on"},
-    region=os.getenv("MINIO_REGION") or None,
-)
+def create_minio_client(*, http_client=None) -> Minio:
+    return Minio(
+        os.getenv("MINIO_URL", "minio:9000"),
+        access_key=os.getenv("MINIO_ACCESS_KEY", "admin"),
+        secret_key=os.getenv("MINIO_SECRET_KEY", "password123"),
+        secure=os.getenv("MINIO_SECURE", "false").lower() in {"1", "true", "yes", "on"},
+        region=os.getenv("MINIO_REGION") or None,
+        http_client=http_client,
+    )
+
+
+minio_client = create_minio_client()
 
 _request_public_base_url: ContextVar[str | None] = ContextVar("request_public_base_url", default=None)
 

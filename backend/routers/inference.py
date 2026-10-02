@@ -89,7 +89,7 @@ def _reusable_task(
 
 def _ensure_celery_worker_available() -> None:
     try:
-        responses = celery_app.control.ping(timeout=0.7)
+        responses = celery_app.control.ping(timeout=3.0, limit=1)
     except Exception as exc:
         raise HTTPException(
             status_code=503,
@@ -100,8 +100,8 @@ def _ensure_celery_worker_available() -> None:
         raise HTTPException(
             status_code=503,
             detail=(
-                "Celery worker chua chay nen pipeline se bi ket pending. "
-                "Hay bat worker: backend\\.venv\\Scripts\\celery.exe -A celery_app.celery_app worker --loglevel=info --pool=solo"
+                "Worker AI chưa phản hồi kiểm tra. "
+                "Hãy kiểm tra dịch vụ worker/Redis và thử lại."
             ),
         )
 

@@ -16,7 +16,13 @@ import torch
 
 import models
 from database import SessionLocal
-from utils import ensure_bucket_exists, minio_client
+from utils import create_minio_client
+from storage_io import (
+    build_storage_http_client, list_object_files, read_object_bytes,
+    retry_storage_operation,
+)
+
+minio_client = create_minio_client(http_client=build_storage_http_client())
 
 CURRENT_DIR = os.path.dirname(__file__)
 if CURRENT_DIR not in sys.path:
@@ -32,7 +38,14 @@ ai_pipeline: "TumorAnalysisPipeline | None" = None
 
 def _upload_result_files_to_minio(result: dict, prefix: str) -> dict:
     """Upload generated pipeline files to MinIO and replace local paths by MinIO paths."""
-    ensure_bucket_exists(RESULTS_BUCKET)
+    if not retry_storage_operation(
+        lambda: minio_client.bucket_exists(RESULTS_BUCKET),
+        label=f"Kiem tra bucket {RESULTS_BUCKET}",
+    ):
+        retry_storage_operation(
+            lambda: minio_client.make_bucket(RESULTS_BUCKET),
+            label=f"Tao bucket {RESULTS_BUCKET}",
+        )
     clean_result = dict(result)
 
     for key, value in list(clean_result.items()):
@@ -43,11 +56,14 @@ def _upload_result_files_to_minio(result: dict, prefix: str) -> dict:
         object_name = f"{prefix}/{filename}"
         content_type = mimetypes.guess_type(value)[0] or "application/octet-stream"
 
-        minio_client.fput_object(
-            bucket_name=RESULTS_BUCKET,
-            object_name=object_name,
-            file_path=value,
-            content_type=content_type,
+        retry_storage_operation(
+            lambda: minio_client.fput_object(
+                bucket_name=RESULTS_BUCKET,
+                object_name=object_name,
+                file_path=value,
+                content_type=content_type,
+            ),
+            label=f"Tai ket qua /{RESULTS_BUCKET}/{object_name}",
         )
         clean_result[key] = f"/{RESULTS_BUCKET}/{object_name}"
 
@@ -116,12 +132,7 @@ def run_mri_pipeline(self, task_id: int, image_id: int):
         if rna_record:
             try:
                 rna_bucket, rna_object = _parse_minio_path(rna_record.file_path)
-                rna_response = minio_client.get_object(rna_bucket, rna_object)
-                try:
-                    rna_bytes = rna_response.read()
-                finally:
-                    rna_response.close()
-                    rna_response.release_conn()
+                rna_bytes = read_object_bytes(minio_client, rna_bucket, rna_object)
 
                 separator = "\t" if rna_record.file_format == "tsv" else ","
                 lines = rna_bytes.decode("utf-8").strip().splitlines()
@@ -156,19 +167,14 @@ def run_mri_pipeline(self, task_id: int, image_id: int):
         if image_record.is_series:
             bucket_name, folder_prefix = _parse_minio_path(image_record.file_path)
             # List objects in the series folder
-            objects = minio_client.list_objects(bucket_name, prefix=folder_prefix, recursive=True)
+            objects = list_object_files(minio_client, bucket_name, folder_prefix)
             image_bytes_list = []
             
             # Sort by name to keep slice order if possible
             sorted_objects = sorted(list(objects), key=lambda x: x.object_name)
             
             for obj in sorted_objects:
-                obj_res = minio_client.get_object(bucket_name, obj.object_name)
-                try:
-                    image_bytes_list.append(obj_res.read())
-                finally:
-                    obj_res.close()
-                    obj_res.release_conn()
+                image_bytes_list.append(read_object_bytes(minio_client, bucket_name, obj.object_name))
             
             print(f"[CELERY WORKER] Dang chay SERIES pipeline voi {len(image_bytes_list)} lat cat.")
             
@@ -189,12 +195,7 @@ def run_mri_pipeline(self, task_id: int, image_id: int):
         else:
             # Single image mode
             bucket_name, object_name = _parse_minio_path(image_record.file_path)
-            response = minio_client.get_object(bucket_name, object_name)
-            try:
-                image_bytes = response.read()
-            finally:
-                response.close()
-                response.release_conn()
+            image_bytes = read_object_bytes(minio_client, bucket_name, object_name)
 
             def progress_updater(percent, status_text):
                 self.update_state(
@@ -318,26 +319,20 @@ def run_prognosis_pipeline(self, task_id: int, patient_id: int, image_id: int | 
             image_bucket, folder_or_file = _parse_minio_path(mri_record.file_path)
             if mri_record.is_series:
                 is_mri_series = True
-                objects = list(minio_client.list_objects(image_bucket, prefix=folder_or_file, recursive=True))
+                objects = list_object_files(minio_client, image_bucket, folder_or_file)
                 sorted_objs = sorted(objects, key=lambda x: [int(c) if c.isdigit() else c.lower() for c in re.split(r'(\d+)', x.object_name)])
                 
                 # Load TOÀN BỘ slices để pipeline tự quét tìm key slice
                 mri_all_bytes = []
                 for obj in sorted_objs:
-                    resp = minio_client.get_object(image_bucket, obj.object_name)
-                    try:
-                        mri_all_bytes.append(resp.read())
-                    finally:
-                        resp.close()
-                        resp.release_conn()
+                    mri_all_bytes.append(read_object_bytes(minio_client, image_bucket, obj.object_name))
+                    self.update_state(
+                        state="PROGRESS",
+                        meta={"percent": 5, "status": f"Dang tai MRI: {len(mri_all_bytes)}/{len(sorted_objs)} lat cat..."},
+                    )
             else:
                 image_object = folder_or_file
-                image_response = minio_client.get_object(image_bucket, image_object)
-                try:
-                    mri_bytes = image_response.read()
-                finally:
-                    image_response.close()
-                    image_response.release_conn()
+                mri_bytes = read_object_bytes(minio_client, image_bucket, image_object)
 
         # 2. Tìm WSI Tiles (nếu có)
         wsi_record = (
@@ -352,34 +347,39 @@ def run_prognosis_pipeline(self, task_id: int, patient_id: int, image_id: int | 
         
         wsi_tiles = []
         if wsi_record:
-            from concurrent.futures import ThreadPoolExecutor
+            from concurrent.futures import ThreadPoolExecutor, as_completed
             wsi_bucket, wsi_folder = _parse_minio_path(wsi_record.file_path)
-            objects = list(minio_client.list_objects(wsi_bucket, prefix=wsi_folder, recursive=True))
-            
-            def load_tile(obj_name):
-                resp = minio_client.get_object(wsi_bucket, obj_name)
-                try:
-                    return resp.read()
-                finally:
-                    resp.close()
-                    resp.release_conn()
+            objects = list_object_files(minio_client, wsi_bucket, wsi_folder)
 
-            # Tải song song tối đa 10 tiles cùng lúc để tăng tốc độ I/O
-            with ThreadPoolExecutor(max_workers=10) as executor:
-                wsi_tiles = list(executor.map(lambda o: load_tile(o.object_name), objects))
+            # Limit simultaneous R2 connections and retain tile order even if
+            # a slow transfer completes after other tiles.
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = {
+                    executor.submit(read_object_bytes, minio_client, wsi_bucket, obj.object_name): index
+                    for index, obj in enumerate(objects)
+                }
+                wsi_tiles = [None] * len(objects)
+                for completed, future in enumerate(as_completed(futures), start=1):
+                    wsi_tiles[futures[future]] = future.result()
+                    self.update_state(
+                        state="PROGRESS",
+                        meta={
+                            "percent": 6 + int(2 * completed / len(objects)),
+                            "status": f"Đang tải WSI: {completed}/{len(objects)} ảnh...",
+                        },
+                    )
 
         # 3. Tìm RNA Data (nếu có)
         rna_record = db.query(models.RnaData).filter(models.RnaData.patient_id == patient_id).first()
         rna_vector = None
         rna_gene_names = None
         if rna_record:
+            self.update_state(
+                state="PROGRESS",
+                meta={"percent": 9, "status": "Đang tải dữ liệu RNA..."},
+            )
             rna_bucket, rna_object = _parse_minio_path(rna_record.file_path)
-            rna_response = minio_client.get_object(rna_bucket, rna_object)
-            try:
-                rna_bytes = rna_response.read()
-            finally:
-                rna_response.close()
-                rna_response.release_conn()
+            rna_bytes = read_object_bytes(minio_client, rna_bucket, rna_object)
 
             separator = "\t" if rna_record.file_format == "tsv" else ","
             df = pd.read_csv(io.BytesIO(rna_bytes), sep=separator)

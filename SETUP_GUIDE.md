@@ -420,6 +420,19 @@ Dung HTTP/2:
 cloudflared tunnel --protocol http2 --url http://localhost:8000
 ```
 
+### Pipeline dung o 5% hoac bao IncompleteRead khi tai R2
+
+Worker tu thu lai toi da 3 lan khi ket noi bi ngat, bao gom ca loi doc file giua chung. Du lieu tai thieu se bi bo va file duoc tai lai toan bo. Ket noi co timeout 10 giay, doc du lieu co timeout 30 giay; WSI tai toi da 4 anh dong thoi va hien so anh da tai tren thanh tien trinh.
+
+Sau khi cap nhat source, recreate worker de nap code moi:
+
+```powershell
+docker compose -f docker-compose.tunnel.yml --env-file .env.tunnel up -d --no-deps --force-recreate worker
+docker compose -f docker-compose.tunnel.yml --env-file .env.tunnel logs --tail 100 worker
+```
+
+Chi recreate khi worker khong dang xu ly job. Worker dung `--pool=threads --concurrency=1` de van phan hoi kiem tra trong luc xu ly AI. Neu job da bao failed, chay lai pipeline tren dung anh MRI; loi file khong ton tai hoac khong co quyen R2 can sua du lieu/quyen truy cap.
+
 ### Giai thich XAI bi Hugging Face timeout
 
 Tang timeout trong `.env.tunnel`:

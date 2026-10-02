@@ -73,7 +73,7 @@ services:
 
   worker:
     image: neuroproject-ai:latest
-    command: celery -A celery_app.celery_app worker --loglevel=info --pool=solo
+    command: celery -A celery_app.celery_app worker --loglevel=info --pool=threads --concurrency=1
     volumes:
       - ./backend:/app
     environment:
