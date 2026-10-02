@@ -1,7 +1,6 @@
 import io
 import os
 import uuid
-import pandas as pd
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from minio.error import S3Error
 from sqlalchemy.orm import Session
@@ -10,22 +9,28 @@ import models
 import schemas
 import crud
 from database import get_db
-from utils import minio_client, get_current_user
+from utils import create_minio_client, get_current_user
+from rna_import import prepare_rna_file
+from storage_io import (
+    StorageTransferError, build_storage_http_client, ensure_storage_bucket,
+    retry_storage_operation,
+)
+
+minio_client = create_minio_client(http_client=build_storage_http_client())
 
 router = APIRouter(tags=["Multimodal Data"])
 RNA_BUCKET = os.getenv("RNA_BUCKET") or os.getenv("MINIO_BUCKET") or os.getenv("R2_BUCKET") or "medical-data"
 RNA_OBJECT_PREFIX = os.getenv("RNA_OBJECT_PREFIX", "rna-data").strip("/")
 
 ALLOWED_RNA_EXTENSIONS = {"csv", "tsv"}
-REQUIRED_RNA_COLUMN = "patient_id"
 
 
 # ============================================================
-# POST /upload/rna/ — Tải lên file RNA-seq với 3-bước validation
+# POST /upload/rna/ — Gán một mẫu RNA cho bệnh nhân được chọn
 # ============================================================
 
 @router.post("/upload/rna/", response_model=schemas.RnaDataResponse)
-async def upload_rna(
+def upload_rna(
     patient_id: str,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -40,71 +45,46 @@ async def upload_rna(
             detail=f"Định dạng không hợp lệ. Chỉ chấp nhận: {', '.join(ALLOWED_RNA_EXTENSIONS)}",
         )
 
-    # Đọc toàn bộ bytes một lần để dùng lại
-    file_bytes = await file.read()
-
-    # --- BƯỚC 2: Kiểm tra cột `patient_id` trong file ---
-    try:
-        separator = "\t" if extension == "tsv" else ","
-        # Chỉ đọc header để tránh tốn RAM khi file lớn
-        header_df = pd.read_csv(io.BytesIO(file_bytes), sep=separator, nrows=0)
-        
-        has_header = REQUIRED_RNA_COLUMN in header_df.columns
-        
-        if not has_header:
-            # Nếu không thấy cột patient_id trong header, thử kiểm tra dòng đầu tiên (không header)
-            test_df = pd.read_csv(io.BytesIO(file_bytes), sep=separator, nrows=1, header=None)
-            if not test_df.empty and str(test_df.iloc[0, 0]) == patient_id:
-                # File không có header nhưng dòng 1, cột 1 khớp với patient_id
-                file_patient_ids = [str(test_df.iloc[0, 0])]
-                num_genes = test_df.shape[1] - 1
-            else:
-                raise HTTPException(
-                    status_code=422,
-                    detail=f"File thiếu cột bắt buộc '{REQUIRED_RNA_COLUMN}'. "
-                           f"Các cột hiện có: {list(header_df.columns[:10])}. "
-                           f"Nếu file không có header, cột đầu tiên phải chứa patient_id={patient_id}.",
-                )
-        else:
-            # --- BƯỚC 3: Xác minh patient_id khớp với DB (trường hợp có header) ---
-            data_df = pd.read_csv(io.BytesIO(file_bytes), sep=separator, usecols=[REQUIRED_RNA_COLUMN])
-            file_patient_ids = data_df[REQUIRED_RNA_COLUMN].astype(str).unique().tolist()
-            num_genes = header_df.shape[1] - 1
-
-    except HTTPException:
-        raise
-    except Exception as parse_err:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Không thể đọc file. Đảm bảo file đúng định dạng {extension.upper()}. Chi tiết: {parse_err}",
-        )
-
-    if patient_id not in file_patient_ids:
-        raise HTTPException(
-            status_code=422,
-            detail=f"patient_id={patient_id} không tồn tại trong file. "
-                   f"Các ID tìm thấy trong file: {file_patient_ids[:5]}",
-        )
-
-    db_patient = crud.get_patient_for_user(db, patient_id, current_user)
+    db_patient = crud.get_patient_for_user(db, patient_id.strip(), current_user)
     if not db_patient:
         raise HTTPException(
             status_code=404,
             detail=f"Không tìm thấy bệnh nhân với id='{patient_id}' trong hệ thống",
         )
 
+    target_patient_id = db_patient.patient_external_id or str(db_patient.id)
+    try:
+        prepared = prepare_rna_file(
+            file.file.read(),
+            delimiter="\t" if extension == "tsv" else ",",
+            target_patient_id=target_patient_id,
+            patient_aliases={patient_id.strip(), str(db_patient.id), target_patient_id},
+        )
+    except ValueError as parse_err:
+        raise HTTPException(
+            status_code=422, detail=str(parse_err),
+        ) from parse_err
+
+    file_bytes = prepared.content
+
     # --- LƯU FILE LÊN MINIO ---
     unique_filename = f"{uuid.uuid4()}_{file.filename}"
     object_name = f"{RNA_OBJECT_PREFIX}/{unique_filename}" if RNA_OBJECT_PREFIX else unique_filename
 
     try:
-        minio_client.put_object(
-            bucket_name=RNA_BUCKET,
-            object_name=object_name,
-            data=io.BytesIO(file_bytes),
-            length=len(file_bytes),
-            content_type="text/csv" if extension == "csv" else "text/tab-separated-values",
+        ensure_storage_bucket(minio_client, RNA_BUCKET)
+        retry_storage_operation(
+            lambda: minio_client.put_object(
+                bucket_name=RNA_BUCKET,
+                object_name=object_name,
+                data=io.BytesIO(file_bytes),
+                length=len(file_bytes),
+                content_type="text/csv" if extension == "csv" else "text/tab-separated-values",
+            ),
+            label=f"Upload RNA /{RNA_BUCKET}/{object_name}",
         )
+    except StorageTransferError as storage_err:
+        raise HTTPException(status_code=503, detail=str(storage_err)) from storage_err
     except S3Error as storage_err:
         raise HTTPException(
             status_code=500,
@@ -115,7 +95,7 @@ async def upload_rna(
         ) from storage_err
 
     # --- LƯU METADATA VÀO DB ---
-    num_genes = len(header_df.columns) - 1  # Trừ cột patient_id
+    num_genes = prepared.num_genes
     existing_rna = db.query(models.RnaData).filter(models.RnaData.patient_id == db_patient.id).first()
     if existing_rna:
         existing_rna.file_path = f"/{RNA_BUCKET}/{object_name}"

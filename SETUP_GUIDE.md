@@ -420,6 +420,18 @@ Dung HTTP/2:
 cloudflared tunnel --protocol http2 --url http://localhost:8000
 ```
 
+### Upload WSI/RNA cho benh nhan duoc chon
+
+Trong trang Upload, nhap ma benh nhan can nhan du lieu. WSI chap nhan ZIP chua tiles anh hoac nhieu file anh. File RNA CSV/TSV mot mau duoc gan cho benh nhan nay, ke ca khi patient_id trong file la ma mau goc khac; gia tri gene duoc giu nguyen. File nhieu mau can co mot dong trung ma benh nhan, hoac can tach rieng mau muon dung truoc khi upload.
+
+Sau khi them/thay WSI, RNA hoac lam sang, chay lai pipeline de tinh ket qua voi dau vao moi. He thong chi dung lai job cu khi cac dau vao khong thay doi. Upload WSI khong thay the MRI dang duoc chon; neu da co MRI, pipeline lay MRI moi nhat cua benh nhan khi chua chon file MRI moi.
+
+Sau khi cap nhat source tren stack tunnel dang chay, nap lai backend va worker luc khong co job dang xu ly:
+
+```powershell
+docker compose -f docker-compose.tunnel.yml --env-file .env.tunnel restart backend worker
+```
+
 ### Pipeline dung o 5% hoac bao IncompleteRead khi tai R2
 
 Worker tu thu lai toi da 3 lan khi ket noi bi ngat, bao gom ca loi doc file giua chung. Du lieu tai thieu se bi bo va file duoc tai lai toan bo. Ket noi co timeout 10 giay, doc du lieu co timeout 30 giay; WSI tai toi da 4 anh dong thoi va hien so anh da tai tren thanh tien trinh.

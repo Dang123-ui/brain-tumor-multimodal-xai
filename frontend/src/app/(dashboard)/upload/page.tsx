@@ -63,6 +63,10 @@ export default function UploadPage() {
   const [requireNewUpload, setRequireNewUpload] = useState(false);
 
   useEffect(() => {
+    setLastUploadedImageId(null);
+  }, [patientId]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
 
     const queryPatientId = searchParams.get("patientId") || searchParams.get("patient_id");
@@ -288,14 +292,14 @@ export default function UploadPage() {
     setStatusMsg({ text: "", type: "" });
 
     try {
-      setStatusMsg({ text: `Đang tải lên và lọc ${wsiFiles.length} tiles WSI bằng AI...`, type: "success" });
+      const isZip = wsiFiles.length === 1 && wsiFiles[0].name.toLowerCase().endsWith(".zip");
+      setStatusMsg({ text: isZip ? "Đang tải ZIP và lọc các tiles WSI bằng AI..." : `Đang tải lên và lọc ${wsiFiles.length} tiles WSI bằng AI...`, type: "success" });
       const response = await apiService.upload.wsiSeries(
         patientId.trim(),
         wsiFiles.length === 1 && wsiFiles[0].name.toLowerCase().endsWith(".zip") ? wsiFiles[0] : wsiFiles
       );
       
-      const { image_id, num_valid_tiles } = response.data;
-      setLastUploadedImageId(image_id);
+      const { num_valid_tiles } = response.data;
       setUploadedStatus(prev => ({ ...prev, wsi: true }));
       setStatusMsg({ 
         text: `Upload WSI thành công (Giữ lại ${num_valid_tiles} tiles).`, 
@@ -329,7 +333,7 @@ export default function UploadPage() {
       setRnaFile(null);
     } catch (err: any) {
       setStatusMsg({
-        text: `Lỗi upload RNA: ${getErrorMessage(err, "Hãy bảo đảm file có cột patient_id hợp lệ.")}`,
+        text: `Lỗi upload RNA: ${getErrorMessage(err, "Hãy kiểm tra file CSV/TSV biểu hiện gene.")}`,
         type: "error",
       });
     } finally {
@@ -376,19 +380,22 @@ export default function UploadPage() {
 
     // Keep the upload selected for this run stable even if React state changes.
     let uploadedImageId = lastUploadedImageId;
-    if (!uploadedImageId && mriFiles.length === 0) {
-      setStatusMsg({
-        text: "Vui lòng upload MRI mới trước khi chạy pipeline. Hệ thống không tự chạy lại kết quả cũ.",
-        type: "error",
-      });
-      return;
-    }
 
     setUploading(true);
     setStatusMsg({ text: "Đang kích hoạt quy trình phân tích tổng hợp AI...", type: "success" });
     setProgress(null);
 
     try {
+      if (!uploadedImageId && mriFiles.length === 0) {
+        const records = await apiService.patients.getById(patientId.trim());
+        const latestMri = [...(records.data?.images || [])]
+          .filter((image: any) => image.modality === "MRI" || image.modality === "MRI_SERIES")
+          .sort((a: any, b: any) => new Date(b.scan_date).getTime() - new Date(a.scan_date).getTime())[0];
+        uploadedImageId = latestMri?.image_id;
+        if (!uploadedImageId) {
+          throw new Error("Vui lòng upload MRI cho bệnh nhân này trước khi chạy pipeline.");
+        }
+      }
       if (!uploadedImageId && mriFiles.length > 0) {
         setStatusMsg({ text: "Uploading selected MRI...", type: "success" });
         const isSeries = mriFiles.length > 1 || mriFiles[0].name.toLowerCase().endsWith(".zip");
@@ -698,7 +705,7 @@ export default function UploadPage() {
 
             <h3 className="text-xl font-bold text-slate-100 mb-2 text-center">Tải lên dữ liệu RNA-seq</h3>
             <p className="text-slate-400 mb-8 max-w-md text-center">
-              Backend yêu cầu truyền đúng patient_id cùng file RNA.
+              File CSV/TSV một mẫu sẽ được gán cho bệnh nhân bạn chọn. Bạn có thể dùng lại file mẫu mà không cần sửa mã bệnh nhân trong file.
             </p>
 
             <div className="flex flex-col items-center gap-4 w-full max-w-sm">

@@ -7,6 +7,7 @@ import models
 import schemas
 from celery_app import celery_app
 from database import get_db
+from inference_inputs import prognosis_input_signature
 from utils import get_current_user
 
 router = APIRouter(prefix="/inference", tags=["AI Inference"])
@@ -61,6 +62,7 @@ def _reusable_task(
     task_type: str,
     target_id: int,
     image_id: int | None = None,
+    input_signature: str | None = None,
 ) -> models.InferenceTask | None:
     """Reuse an active/completed task for the exact image instead of duplicating work."""
     tasks = (
@@ -73,6 +75,11 @@ def _reusable_task(
         .order_by(models.InferenceTask.created_at.desc(), models.InferenceTask.id.desc())
         .all()
     )
+    if input_signature is not None:
+        tasks = [
+            task for task in tasks
+            if isinstance(task.result, dict) and task.result.get("input_signature") == input_signature
+        ]
     if image_id is None:
         return tasks[0] if tasks else None
 
@@ -211,7 +218,8 @@ def trigger_prognosis_inference(
 
     _ensure_celery_worker_available()
 
-    existing_task = _reusable_task(db, "prognosis", real_id, selected_image_id)
+    input_signature = prognosis_input_signature(db, patient, selected_image_id)
+    existing_task = _reusable_task(db, "prognosis", real_id, selected_image_id, input_signature)
     if existing_task:
         return schemas.InferenceTaskResponse(
             task_id=existing_task.id,
@@ -226,7 +234,7 @@ def trigger_prognosis_inference(
         target_id=real_id,
         celery_signature="tasks.run_prognosis_pipeline",
         celery_extra_args=[selected_image_id],
-        initial_result={"image_id": selected_image_id},
+        initial_result={"image_id": selected_image_id, "input_signature": input_signature},
     )
 
     return schemas.InferenceTaskResponse(

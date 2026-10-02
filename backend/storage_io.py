@@ -97,3 +97,12 @@ def list_object_files(client, bucket: str, prefix: str) -> list:
         lambda: list(client.list_objects(bucket, prefix=prefix, recursive=True)),
         label=f"Liet ke file /{bucket}/{prefix}",
     )
+
+
+def ensure_storage_bucket(client, bucket: str) -> None:
+    if not retry_storage_operation(
+        lambda: client.bucket_exists(bucket), label=f"Kiem tra bucket {bucket}",
+    ):
+        retry_storage_operation(
+            lambda: client.make_bucket(bucket), label=f"Tao bucket {bucket}",
+        )

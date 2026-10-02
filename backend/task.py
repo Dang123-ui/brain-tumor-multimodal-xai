@@ -16,6 +16,7 @@ import torch
 
 import models
 from database import SessionLocal
+from inference_inputs import prognosis_input_signature
 from utils import create_minio_client
 from storage_io import (
     build_storage_http_client, list_object_files, read_object_bytes,
@@ -289,6 +290,9 @@ def run_prognosis_pipeline(self, task_id: int, patient_id: int, image_id: int | 
         if not task_record:
             return {"error": "Task not found"}
 
+        patient = db.query(models.Patient).filter_by(id=patient_id).one()
+        input_signature = prognosis_input_signature(db, patient, image_id)
+
         task_record.status = "processing"
         db.commit()
 
@@ -341,7 +345,7 @@ def run_prognosis_pipeline(self, task_id: int, patient_id: int, image_id: int | 
                 models.Image.patient_id == patient_id,
                 models.Image.modality == "WSI_SERIES",
             )
-            .order_by(models.Image.scan_date.desc())
+            .order_by(models.Image.scan_date.desc(), models.Image.id.desc())
             .first()
         )
         
@@ -468,6 +472,7 @@ def run_prognosis_pipeline(self, task_id: int, patient_id: int, image_id: int | 
             return data
 
         clean_result = sanitize_json(result)
+        clean_result["input_signature"] = input_signature
         if mri_record:
             clean_result["image_id"] = mri_record.id
 

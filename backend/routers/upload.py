@@ -7,7 +7,13 @@ import crud
 
 import models
 from database import get_db
-from utils import get_current_user, minio_client, ensure_bucket_exists, prepare_mri_upload
+from utils import get_current_user, minio_client, ensure_bucket_exists, prepare_mri_upload, create_minio_client
+from storage_io import (
+    StorageTransferError, build_storage_http_client, ensure_storage_bucket,
+    retry_storage_operation,
+)
+
+multimodal_minio_client = create_minio_client(http_client=build_storage_http_client())
 
 router = APIRouter(prefix="/upload", tags=["Upload"])
 BUCKET_NAME = os.getenv("MINIO_BUCKET") or os.getenv("R2_BUCKET") or "medical-data"
@@ -154,7 +160,7 @@ async def upload_mri_series(
     
 # API: Tải lên chuỗi lát cắt WSI (Whole Slide Image Tiles)
 @router.post("/wsi/series")
-async def upload_wsi_series(
+def upload_wsi_series(
     patient_id: str, 
     files: List[UploadFile] = File(None), 
     zip_file: UploadFile = File(None), 
@@ -168,12 +174,12 @@ async def upload_wsi_series(
     from ai_core.utils.wsi_filter import WSITileFilter
     import zipfile
     import io
+    from concurrent.futures import ThreadPoolExecutor
     
     patient = crud.get_patient_for_user(db, patient_id, current_user)
     if not patient:
         raise HTTPException(status_code=404, detail=f"Không tìm thấy bệnh nhân '{patient_id}'")
     
-    ensure_bucket_exists(BUCKET_NAME)
     series_uuid = str(uuid.uuid4())
     series_folder = f"wsi_series_{series_uuid}"
     
@@ -182,23 +188,31 @@ async def upload_wsi_series(
 
     # 1. Thu thập dữ liệu thô
     if zip_file:
-        zip_bytes = await zip_file.read()
-        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
-            for file_info in z.infolist():
-                if file_info.is_dir() or file_info.filename.startswith("__") or file_info.filename.split("/")[-1].startswith("."):
-                    continue
-                with z.open(file_info) as f:
-                    all_raw_bytes.append(f.read())
-                    filenames.append(file_info.filename.split("/")[-1])
+        zip_bytes = zip_file.file.read()
+        try:
+            with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
+                for file_info in z.infolist():
+                    filename = file_info.filename.replace("\\", "/").split("/")[-1]
+                    if file_info.is_dir() or file_info.filename.startswith("__") or filename.startswith("."):
+                        continue
+                    if os.path.splitext(filename)[1].lower() not in {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}:
+                        continue
+                    with z.open(file_info) as f:
+                        all_raw_bytes.append(f.read())
+                        filenames.append(filename)
+        except zipfile.BadZipFile as exc:
+            raise HTTPException(status_code=422, detail="File ZIP WSI không hợp lệ hoặc chưa tải đủ.") from exc
     
     if files:
         for file in files:
-            content = await file.read()
+            content = file.file.read()
             all_raw_bytes.append(content)
-            filenames.append(file.filename)
+            filenames.append((file.filename or "tile.png").replace("\\", "/").split("/")[-1])
 
     if not all_raw_bytes:
-        raise HTTPException(status_code=400, detail="Không có file nào được tải lên")
+        raise HTTPException(status_code=400, detail="Cần tải ảnh WSI hoặc ZIP chứa các tiles ảnh.")
+    if len(set(filenames)) != len(filenames):
+        raise HTTPException(status_code=422, detail="Các tiles WSI cần có tên file khác nhau.")
 
     # 2. Lọc Tiles bằng CNN (Giới hạn 100 tiles tốt nhất)
     try:
@@ -209,20 +223,33 @@ async def upload_wsi_series(
         scored_tiles = tile_filter.score_tiles(all_raw_bytes)
         top_indices = [idx for idx, score in scored_tiles]
         
-        uploaded_paths = []
-        for idx in top_indices:
+        if not top_indices:
+            raise HTTPException(status_code=422, detail="Không tìm thấy tile WSI đọc được trong các file đã tải.")
+        ensure_storage_bucket(multimodal_minio_client, BUCKET_NAME)
+
+        def upload_tile(idx):
             content = all_raw_bytes[idx]
             fname = filenames[idx]
             
             minio_path = f"{series_folder}/{fname}"
-            minio_client.put_object(
-                bucket_name=BUCKET_NAME,
-                object_name=minio_path,
-                data=io.BytesIO(content),
-                length=len(content),
-                content_type="image/png"
+            retry_storage_operation(
+                lambda: multimodal_minio_client.put_object(
+                    bucket_name=BUCKET_NAME,
+                    object_name=minio_path,
+                    data=io.BytesIO(content),
+                    length=len(content),
+                    content_type="image/png",
+                ),
+                label=f"Upload WSI /{BUCKET_NAME}/{minio_path}",
             )
-            uploaded_paths.append(minio_path)
+            return minio_path
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            uploaded_paths = list(executor.map(upload_tile, top_indices))
+    except HTTPException:
+        raise
+    except StorageTransferError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi AI Filter WSI: {str(e)}")
 
